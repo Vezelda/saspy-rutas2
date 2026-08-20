@@ -56,8 +56,8 @@ const Printer = {
       rows += `
         <tr style="border-bottom:0.5px solid #e5e5e5;">
           <td style="padding:7px 12px;font-weight:600;color:#666;text-align:center;">${i+1}</td>
-          <td style="padding:7px 12px;font-size:12px;">${stop.name}</td>
-          <td style="padding:7px 12px;font-size:11px;color:#777;">${stop.city}</td>
+          <td style="padding:7px 12px;font-size:12px;">${esc(stop.name)}</td>
+          <td style="padding:7px 12px;font-size:11px;color:#777;">${esc(stop.city)}</td>
           <td style="padding:7px 12px;font-size:12px;text-align:center;font-weight:600;">${qty}</td>
           <td style="padding:7px 12px;font-size:11px;color:#777;white-space:nowrap;">
             ${stop.opens||'00:00'} – ${stop.closes||'24:00'}
@@ -75,9 +75,9 @@ const Printer = {
           <td></td>
           <td colspan="6" style="padding:4px 12px;font-size:10px;color:#aaa;">
             ${stop.mapsUrl
-              ? `<a href="${stop.mapsUrl}" style="color:#2563eb;">📍 Ver en Google Maps</a>`
-              : stop.address || ''}
-            ${stop.notes ? ` · ${stop.notes}` : ''}
+              ? `<a href="${esc(stop.mapsUrl)}" style="color:#2563eb;">📍 Ver en Google Maps</a>`
+              : esc(stop.address || '')}
+            ${stop.notes ? ` · ${esc(stop.notes)}` : ''}
           </td>
         </tr>`;
     });
@@ -113,7 +113,7 @@ const Printer = {
     const html = `<!DOCTYPE html>
 <html lang="es"><head>
 <meta charset="utf-8">
-<title>Hoja de ruta — ${driver?.name||'Chofer'}</title>
+<title>Hoja de ruta — ${esc(driver?.name||'Chofer')}</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: Arial, sans-serif; color: #111; padding: 12mm 10mm; font-size: 12px; }
@@ -133,9 +133,9 @@ const Printer = {
 <body>
 <div class="hdr">
   <div>
-    <h1>Hoja de ruta — ${driver?.name || '?'}</h1>
+    <h1>Hoja de ruta — ${esc(driver?.name || '?')}</h1>
     <div class="meta">
-      <div class="mi"><strong>${vehicle?.name||'?'}</strong>Vehículo</div>
+      <div class="mi"><strong>${esc(vehicle?.name||'?')}</strong>Vehículo</div>
       <div class="mi"><strong>${fecha}</strong>Fecha</div>
       <div class="mi"><strong>${asgn?.departureTime||'?'} hs</strong>Salida</div>
       <div class="mi"><strong>${endLabel}</strong>Regreso a</div>

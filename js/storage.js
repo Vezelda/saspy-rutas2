@@ -156,5 +156,28 @@ const Storage = {
     Object.values(KEYS).forEach(k => localStorage.removeItem(k));
     this.init();
     console.log('🔄 Datos reiniciados a valores por defecto');
-  }
+  },
+
+  // ── Exportar / Importar (backup) ─────────────────────────────────────
+  // Todo vive únicamente en localStorage — sin esto, limpiar el navegador
+  // o cambiar de equipo borra paradas, choferes y vehículos sin aviso.
+  exportAll() {
+    return {
+      version:    typeof DATA_VERSION !== 'undefined' ? DATA_VERSION : '1',
+      exportedAt: new Date().toISOString(),
+      stops:      this.getStops(),
+      drivers:    this.getDrivers(),
+      vehicles:   this.getVehicles(),
+      carriers:   this.getCarriers(),
+    };
+  },
+  importAll(data) {
+    if (!data || !Array.isArray(data.stops) || !Array.isArray(data.drivers) || !Array.isArray(data.vehicles)) {
+      throw new Error('Archivo inválido: faltan paradas, choferes o vehículos.');
+    }
+    this.saveStops(data.stops);
+    this.saveDrivers(data.drivers);
+    this.saveVehicles(data.vehicles);
+    if (Array.isArray(data.carriers)) this.saveCarriers(data.carriers);
+  },
 };

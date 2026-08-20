@@ -91,7 +91,7 @@ const Daily = {
       const on  = !!asgMap[d.id];
       const veh = vMap[a.vehicleId];
       const vehicleOpts = vehicles.map(v =>
-        '<option value="' + v.id + '"' + (a.vehicleId===v.id?' selected':'') + '>' + v.name + '</option>'
+        '<option value="' + v.id + '"' + (a.vehicleId===v.id?' selected':'') + '>' + esc(v.name) + '</option>'
       ).join('');
       const homeOpt = d.canEndAtHome ? `
         <div class="form-group">
@@ -101,7 +101,7 @@ const Daily = {
             <option value="1" ${a.endsAtHome?'selected':''}>Su casa</option>
           </select>
         </div>` : '';
-      const isInteriorDriver = ['HERNAN','CARBALLO','JOSE'].includes(d.name);
+      const isInteriorDriver = !!Optimizer._corridorKeyFromDriver(d);
       const breakVal = a.breakInterval !== undefined ? a.breakInterval : (isInteriorDriver ? 14400 : 0);
       const breakOpt = `
         <div class="form-group">
@@ -119,8 +119,8 @@ const Daily = {
             <div style="display:flex;align-items:center;gap:10px;">
               <div class="driver-avatar">${d.name.charAt(0)}</div>
               <div>
-                <div class="driver-name">${d.name}</div>
-                <div class="driver-veh-label">${veh?.name||'Sin vehiculo'}</div>
+                <div class="driver-name">${esc(d.name)}</div>
+                <div class="driver-veh-label">${esc(veh?.name||'Sin vehiculo')}</div>
               </div>
             </div>
             <label class="toggle-wrap">
@@ -157,7 +157,7 @@ const Daily = {
           this.session.assignments.map(a => {
             const d = Storage.getDrivers().find(x => x.id === a.driverId);
             return '<option value="' + a.driverId + '"' + (deliveryDriverId === a.driverId ? ' selected' : '') + '>'
-              + (d?.name || a.driverId) + '</option>';
+              + esc(d?.name || a.driverId) + '</option>';
           }).join('');
         return `
             <div class="driver-card ${on?'active':''}" id="cc-${c.id}">
@@ -165,8 +165,8 @@ const Daily = {
                 <div style="display:flex;align-items:center;gap:10px;">
                   <div class="driver-avatar" style="background:#fef3c7;color:#92400e;">T</div>
                   <div>
-                    <div class="driver-name">${c.name}</div>
-                    <div class="driver-veh-label">${c.contact||'Transportadora externa'}</div>
+                    <div class="driver-name">${esc(c.name)}</div>
+                    <div class="driver-veh-label">${esc(c.contact||'Transportadora externa')}</div>
                   </div>
                 </div>
                 <label class="toggle-wrap">
@@ -207,7 +207,7 @@ const Daily = {
     if (on) {
       if (!this.session.assignments.find(a => a.driverId === id)) {
         const d = Storage.getDrivers().find(x => x.id === id);
-        const isInterior = ['HERNAN','CARBALLO','JOSE'].includes(d?.name||'');
+        const isInterior = !!Optimizer._corridorKeyFromDriver(d);
         this.session.assignments.push({ driverId:id, vehicleId:d?.defaultVehicle||'', departureTime:'06:00', endsAtHome:d?.canEndAtHome||false, breakInterval: isInterior ? 14400 : 0 });
       }
     } else {
@@ -329,21 +329,21 @@ const Daily = {
       for (const a of this.session.assignments) {
         const d = drivers.find(x => x.id === a.driverId);
         opts += '<option value="' + a.driverId + '"' + (assigned===a.driverId?' selected':'') + '>'
-          + (d?.name||a.driverId) + '</option>';
+          + esc(d?.name||a.driverId) + '</option>';
       }
       // Separador visual
       if (carriers.length) opts += '<option disabled>──────────────</option>';
       // Todas las transportadoras disponibles (no requiere activarlas en paso 1)
       for (const c of carriers) {
         opts += '<option value="' + c.id + '"' + (assigned===c.id?' selected':'') + '>'
-          + 'Transp: ' + c.name + '</option>';
+          + 'Transp: ' + esc(c.name) + '</option>';
       }
       const selWarn = qty > 0 && !assigned ? ' sel-warn' : '';
       const selDis  = qty === 0 ? ' disabled' : '';
 
       return '<tr class="' + (qty>0?'row-active':'') + '">'
-        + '<td class="td-name"><div class="stop-name">' + s.name + '</div>'
-        + '<div class="stop-sub">' + s.city + ' &middot; ' + (s.opens||'00:00') + '&ndash;' + (s.closes||'24:00') + '</div></td>'
+        + '<td class="td-name"><div class="stop-name">' + esc(s.name) + '</div>'
+        + '<div class="stop-sub">' + esc(s.city) + ' &middot; ' + (s.opens||'00:00') + '&ndash;' + (s.closes||'24:00') + '</div></td>'
         + '<td><span class="badge ' + (typeClr[s.type]||'') + '">' + s.type + '</span></td>'
         + '<td><div class="pkg-wrap">'
         + '<button class="pkg-btn" data-id="' + s.id + '" data-delta="-1" onclick="Daily.adjPkgBtn(this)">&#8722;</button>'
@@ -533,7 +533,7 @@ const Daily = {
       <div class="unassigned-panel">
         <div class="unassigned-title">&#9888; ${unassign.length} parada(s) sin asignar</div>
         <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:.5rem;">
-          ${unassign.map(u => { const s=sMap[u.stopId]; return s?'<span class="unassigned-chip">'+s.name+'</span>':''; }).join('')}
+          ${unassign.map(u => { const s=sMap[u.stopId]; return s?'<span class="unassigned-chip">'+esc(s.name)+'</span>':''; }).join('')}
         </div>
       </div>` : '';
 
@@ -541,7 +541,7 @@ const Daily = {
       <div style="background:#f5f5f5;padding:1rem;border-radius:6px;margin-bottom:1rem;font-size:12px;border-left:4px solid #3b82f6;">
         <strong style="display:block;margin-bottom:0.5rem;">📊 Cómo se calcula el tiempo:</strong>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:0.75rem;">
-          <div>⏱️ <strong>Viaje</strong>: Distancia entre puntos (velocidad ciudad 33 km/h, interior 68 km/h)</div>
+          <div>⏱️ <strong>Viaje</strong>: Distancia entre puntos (velocidad ciudad ${Optimizer.SPEED.city} km/h, interior ${Optimizer.SPEED.highway} km/h — solo aplica sin API Key ORS)</div>
           <div>🚐 <strong>Estacionar</strong>: 3 min fijo por parada</div>
           <div>📦 <strong>Bajar paquetes</strong>: 2 min fijo + 2 min por paquete</div>
           <div style="grid-column: 1/-1;color:#666;font-style:italic;">Ejemplo: 5 paquetes = 3 + 2 + (5×2) = 15 minutos de servicio</div>
@@ -560,11 +560,11 @@ const Daily = {
         // Si travelTime > 3600s (60 min) pero distancia es muy corta, hay un problema
         // O si distancia implica > 100 km pero tiempo es < 30 min en ciudad
         const travelMins = step.travelTime / 60;
-        // Estimación: 33 km/h ciudad, 68 km/h interior
-        const estimatedKm = (travelMins * 33 / 60);
+        // Estimación con la misma velocidad de ciudad que usa el optimizador (ver Optimizer.SPEED)
+        const estimatedKm = (travelMins * Optimizer.SPEED.city / 60);
         // Si se ve irreal (muy lento), anotar
         if (travelMins > 120 && estimatedKm < 100) {
-          anomalies.push(`⚠️ ${stop.name}: ${travelMins.toFixed(0)} min parece alto, verificá coords`);
+          anomalies.push(`⚠️ ${esc(stop.name)}: ${travelMins.toFixed(0)} min parece alto, verificá coords`);
         }
       });
     });
@@ -585,7 +585,7 @@ const Daily = {
           <div style="display:flex;align-items:center;gap:12px;">
             <div class="driver-avatar" style="background:#fef3c7;color:#92400e;font-size:18px;">T</div>
             <div>
-              <div style="font-weight:600;font-size:15px;">${route.carrierName}</div>
+              <div style="font-weight:600;font-size:15px;">${esc(route.carrierName)}</div>
               <div style="font-size:12px;color:var(--text2);">Transportadora externa</div>
             </div>
           </div>`;
@@ -601,9 +601,9 @@ const Daily = {
           <div style="display:flex;align-items:center;gap:12px;">
             <div class="driver-avatar">${driver?.name.charAt(0)||'?'}</div>
             <div>
-              <div style="font-weight:600;font-size:15px;">${driver?.name||'?'}</div>
+              <div style="font-weight:600;font-size:15px;">${esc(driver?.name||'?')}</div>
               <div style="font-size:12px;color:var(--text2);">
-                ${veh?.name||'?'} &middot; Sale ${asgn.departureTime} &middot; Regresa a ${endLbl}
+                ${esc(veh?.name||'?')} &middot; Sale ${asgn.departureTime} &middot; Regresa a ${endLbl}
               </div>
             </div>
           </div>`;
@@ -637,8 +637,8 @@ const Daily = {
           + ' id="rs-' + ri + '-' + si + '">'
           + '<div class="rs-num">' + (si+1) + '</div>'
           + '<div style="flex:1;min-width:0;">'
-          + '<div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + stop.name + '</div>'
-          + '<div style="font-size:11px;color:var(--text3);">' + stop.city + ' &middot; ' + qty + ' paquete' + (qty!==1?'s':'') + '</div>'
+          + '<div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(stop.name) + '</div>'
+          + '<div style="font-size:11px;color:var(--text3);">' + esc(stop.city) + ' &middot; ' + qty + ' paquete' + (qty!==1?'s':'') + '</div>'
           + '<div style="font-size:10px;color:#666;margin-top:2px;">'
             + (step.travelTime ? 'Viaje: ' + Math.round(step.travelTime/60) + ' min' : '') 
             + (step.service ? (step.travelTime ? ' • ' : '') + 'Servicio: ' + Math.round(step.service/60) + ' min' : '')
@@ -646,7 +646,7 @@ const Daily = {
           + '</div>'
           + '<div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">'
           + (step.arrival ? '<span style="font-size:12px;color:var(--text2);">' + secsToTime(step.arrival) + (step.arrival>=86400 ? ' <span style="font-size:10px;background:#fef3c7;color:#92400e;padding:1px 4px;border-radius:3px;border:1px solid #fde68a;">+1</span>' : '') + '</span>' : '')
-          + (stop.mapsUrl ? '<a href="' + stop.mapsUrl + '" target="_blank" class="maps-lnk">mapa</a>' : '')
+          + (stop.mapsUrl ? '<a href="' + esc(stop.mapsUrl) + '" target="_blank" class="maps-lnk">mapa</a>' : '')
           + '<span class="badge ' + (typeClr[stop.type]||'') + '">' + stop.type + '</span>'
           + '<button class="rm-stop-btn" onclick="Daily.removeStop(' + ri + ',' + si + ')" title="Quitar">&#215;</button>'
           + '</div>'

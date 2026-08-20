@@ -36,13 +36,65 @@ const App = {
     if (name === 'daily')  Daily.init();
   },
 
+  // ── Backup: exportar / importar ──────────────────────────────────────────
+  exportData() {
+    const data = Storage.exportAll();
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url;
+    a.download = `saspy-backup-${new Date().toISOString().slice(0,10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
+
+  triggerImport() {
+    document.getElementById('import-file-input')?.click();
+  },
+
+  importData(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!confirm('Importar reemplazará TODAS las paradas, choferes, vehículos y transportadoras actuales por las del archivo. ¿Continuar?')) {
+      event.target.value = '';
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        Storage.importAll(JSON.parse(reader.result));
+        alert('✅ Datos importados correctamente.');
+        this.renderConfig();
+      } catch(e) {
+        alert('Error al importar: ' + e.message);
+      } finally {
+        event.target.value = '';
+      }
+    };
+    reader.onerror = () => alert('No se pudo leer el archivo.');
+    reader.readAsText(file);
+  },
+
   // ── Módulo Configuración ─────────────────────────────────────────────────
   renderConfig() {
     const main = document.getElementById('main');
     main.innerHTML = `
-      <div class="module-header">
-        <h1>Configuración</h1>
-        <p>Paradas, choferes y vehículos. Editá y geocodificá coordenadas.</p>
+      <div class="module-header mh-row">
+        <div>
+          <h1>Configuración</h1>
+          <p>Paradas, choferes y vehículos. Editá y geocodificá coordenadas.</p>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <button class="btn" onclick="App.exportData()" title="Descarga un archivo JSON con todas las paradas, choferes, vehículos y transportadoras">
+            ⬇ Exportar backup
+          </button>
+          <button class="btn" onclick="App.triggerImport()" title="Restaura paradas, choferes, vehículos y transportadoras desde un backup JSON">
+            ⬆ Importar backup
+          </button>
+          <input type="file" id="import-file-input" accept="application/json" style="display:none" onchange="App.importData(event)">
+        </div>
       </div>
       <div class="tabs">
         <button class="tab ${this.currentTab==='stops'   ?'active':''}" onclick="App.switchTab('stops')">
@@ -137,8 +189,8 @@ const App = {
     }
     tbody.innerHTML = filtered.map(s =>
       '<tr>' +
-      '<td class="td-name"><div class="stop-name">' + (s.name||'') + '</div>' +
-        '<div class="stop-sub">' + (s.city||'') + ' · ' + (s.dept||'') + '</div></td>' +
+      '<td class="td-name"><div class="stop-name">' + esc(s.name||'') + '</div>' +
+        '<div class="stop-sub">' + esc(s.city||'') + ' · ' + esc(s.dept||'') + '</div></td>' +
       '<td><span class="badge ' + (clr[s.type]||'') + '">' + s.type + '</span></td>' +
       '<td class="td-hours">' + (s.opens||'00:00') + ' – ' + (s.closes||'24:00') + '</td>' +
       '<td class="td-coords">' + (s.lat !== null && s.lat !== undefined
@@ -178,8 +230,8 @@ const App = {
     const rows = filtered.map(s => `
       <tr>
         <td class="td-name">
-          <div class="stop-name">${s.name}</div>
-          <div class="stop-sub">${s.city} · ${s.dept}</div>
+          <div class="stop-name">${esc(s.name)}</div>
+          <div class="stop-sub">${esc(s.city)} · ${esc(s.dept)}</div>
         </td>
         <td><span class="badge ${typeColors[s.type]||''}">${s.type}</span></td>
         <td class="td-hours">${s.opens||'00:00'} – ${s.closes||'24:00'}</td>
@@ -251,8 +303,8 @@ const App = {
 
     const rows = drivers.map(d => `
       <tr>
-        <td class="td-name"><div class="stop-name">${d.name}</div></td>
-        <td>${vMap[d.defaultVehicle] || '—'}</td>
+        <td class="td-name"><div class="stop-name">${esc(d.name)}</div></td>
+        <td>${esc(vMap[d.defaultVehicle] || '—')}</td>
         <td>
           ${d.canEndAtHome
             ? `<span class="badge badge-locker">Sí</span>
@@ -261,7 +313,7 @@ const App = {
             : `<span style="font-size:12px;color:var(--text3);">No — CDD</span>`
           }
         </td>
-        <td class="td-notes">${d.notes || '—'}</td>
+        <td class="td-notes">${esc(d.notes || '—')}</td>
         <td class="td-actions">
           <button class="btn-sm btn-ghost" onclick="App.openEditDriver('${d.id}')">Editar</button>
           <button class="btn-sm btn-danger" onclick="App.deleteDriver('${d.id}')">Borrar</button>
@@ -292,10 +344,10 @@ const App = {
 
     const rows = vehicles.map(v => `
       <tr>
-        <td class="td-name"><div class="stop-name">${v.name}</div></td>
-        <td>${v.type}</td>
-        <td>${v.plate || '—'}</td>
-        <td class="td-notes">${v.notes || '—'}</td>
+        <td class="td-name"><div class="stop-name">${esc(v.name)}</div></td>
+        <td>${esc(v.type)}</td>
+        <td>${esc(v.plate || '—')}</td>
+        <td class="td-notes">${esc(v.notes || '—')}</td>
         <td class="td-actions">
           <button class="btn-sm btn-ghost" onclick="App.openEditVehicle('${v.id}')">Editar</button>
           <button class="btn-sm btn-danger" onclick="App.deleteVehicle('${v.id}')">Borrar</button>
@@ -445,7 +497,7 @@ const App = {
           <div class="api-form">
             <label>Tu API Key de ORS</label>
             <div class="api-input-row">
-              <input type="password" id="ors-key-input" value="${key}"
+              <input type="password" id="ors-key-input" value="${esc(key)}"
                 placeholder="5b3ce3597851110001cf6248..." style="font-family:monospace;">
               <button class="btn" onclick="App.toggleKeyVisibility()">👁</button>
             </div>
@@ -554,7 +606,7 @@ const App = {
     if (result.errors.length > 0 && errEl) {
       errEl.innerHTML = `
         <p class="test-error">⚠ ${result.errors.length} paradas no se pudieron geocodificar:</p>
-        <ul>${result.errors.map(e => `<li>${e.name}: ${e.error}</li>`).join('')}</ul>
+        <ul>${result.errors.map(e => `<li>${esc(e.name)}: ${esc(e.error)}</li>`).join('')}</ul>
         <p>Podés editarlas manualmente y corregir la dirección.</p>
       `;
     }
@@ -614,7 +666,7 @@ const App = {
             <label>Transportadora vinculada (opcional)</label>
             <select id="f-carrier" onchange="App.onCarrierLink(this.value)">
               <option value="">Ninguna — coords manuales</option>
-              ${Storage.getCarriers().map(c => `<option value="${c.id}" ${stop.linkedCarrierId===c.id?'selected':''}>${c.name}</option>`).join('')}
+              ${Storage.getCarriers().map(c => `<option value="${c.id}" ${stop.linkedCarrierId===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}
             </select>
             <small>Al vincular se usan las coordenadas y horarios de la transportadora</small>
           </div>
@@ -745,7 +797,7 @@ const App = {
             <label>Vehículo habitual</label>
             <select id="fd-vehicle">
               <option value="">Sin asignar</option>
-              ${vehicles.map(v => `<option value="${v.id}" ${d.defaultVehicle===v.id?'selected':''}>${v.name}</option>`).join('')}
+              ${vehicles.map(v => `<option value="${v.id}" ${d.defaultVehicle===v.id?'selected':''}>${esc(v.name)}</option>`).join('')}
             </select>
           </div>
           <div class="form-group">
@@ -947,15 +999,7 @@ const App = {
   }
 };
 
-// ── Helper: escapar HTML ───────────────────────────────────────────────────
-function esc(str) {
-  if (!str) return '';
-  return String(str)
-    .replace(/&/g,'&amp;')
-    .replace(/"/g,'&quot;')
-    .replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;');
-}
+// esc() vive en utils.js (cargado antes que este archivo)
 
 // ── Arranque ───────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => App.init());
