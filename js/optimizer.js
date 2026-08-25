@@ -648,10 +648,29 @@ const Optimizer = {
       return this.corridorRoute(order, stops, matrix, packages, depTime);
     }
 
-    // Ciudad / interior sin corredor: ajustar ventanas + 2-opt
+    // Ciudad / interior sin corredor: ajustar ventanas, luego pulir con 2-opt + or-opt
     order = this.enforceWindows(order, stops, matrix, depTime, packages, false);
-    order = this.twoOpt(order, stops, matrix, packages, depTime);
+    order = this.polishRoute(order, stops, matrix, packages, depTime);
     return this.replayRoute(order, stops, matrix, packages, depTime);
+  },
+
+  // Alterna 2-opt (intercambia tramos) y or-opt (reubica una parada individual)
+  // hasta que ninguno mejore más — juntos encuentran mejores secuencias que
+  // 2-opt solo, sin tocar cómo se reparten las paradas entre choferes.
+  polishRoute(order, stops, matrix, packages, depTime) {
+    const n = stops.length;
+    // Rutas muy largas: cada pasada es O(n^3) — limitar pasadas (y saltar or-opt en rutas gigantes)
+    // para no trabar el navegador en el caso raro de un chofer con decenas de paradas.
+    const maxPasses = n > 60 ? 1 : n > 30 ? 2 : 5;
+    let cost = this.routeCostPenalized(this.replayRoute(order, stops, matrix, packages, depTime), stops, depTime);
+    for (let pass = 0; pass < maxPasses; pass++) {
+      order = this.twoOpt(order, stops, matrix, packages, depTime);
+      if (n <= 90) order = this.orOpt(order, stops, matrix, packages, depTime);
+      const newCost = this.routeCostPenalized(this.replayRoute(order, stops, matrix, packages, depTime), stops, depTime);
+      if (newCost >= cost - 1) break;
+      cost = newCost;
+    }
+    return order;
   },
 
   // 2-opt restringido a swaps adyacentes — seguro para rutas de corredor
@@ -776,6 +795,31 @@ const Optimizer = {
       for (let i = 0; i < best.length - 1; i++) {
         for (let j = i + 2; j < best.length; j++) {
           const cand = [...best.slice(0, i+1), ...best.slice(i+1, j+1).reverse(), ...best.slice(j+1)];
+          const cost = this.routeCostPenalized(this.replayRoute(cand, stops, matrix, packages, depTime), stops, depTime);
+          if (cost < bestCost - 30) { best = cand; bestCost = cost; improved = true; break outer; }
+        }
+      }
+    }
+    return best;
+  },
+
+  // Or-opt: prueba reubicar cada parada, una por una, en cualquier otra posición
+  // de la ruta. Encuentra mejoras que 2-opt no ve (ej: una parada aislada que
+  // conviene visitar al principio o al final en vez de en medio del recorrido).
+  orOpt(route, stops, matrix, packages, depTime) {
+    let best     = route.slice();
+    let bestCost = this.routeCostPenalized(this.replayRoute(best, stops, matrix, packages, depTime), stops, depTime);
+    let improved = true;
+    while (improved) {
+      improved = false;
+      outer:
+      for (let i = 0; i < best.length; i++) {
+        for (let j = 0; j <= best.length; j++) {
+          if (j === i || j === i + 1) continue; // misma posición, no es un movimiento real
+          const cand = best.slice();
+          const [node] = cand.splice(i, 1);
+          const insertAt = j > i ? j - 1 : j;
+          cand.splice(insertAt, 0, node);
           const cost = this.routeCostPenalized(this.replayRoute(cand, stops, matrix, packages, depTime), stops, depTime);
           if (cost < bestCost - 30) { best = cand; bestCost = cost; improved = true; break outer; }
         }

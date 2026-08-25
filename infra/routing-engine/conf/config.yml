@@ -1,0 +1,21 @@
+cliArgs:
+  geometry: false      # true = devuelve la polilínea de cada ruta (no la usamos todavía)
+  planmode: false
+  threads: 4           # subilo si la VM tiene más vCPUs — mejora calidad de la solución
+  explore: 5            # 0-5, nivel de búsqueda. 5 = mejor calidad (igual resuelve en segundos a esta escala)
+  limit: '3mb'          # tamaño máximo de request (deja margen para ~150 paradas)
+  logdir: '.'
+  logsize: '50M'
+  maxlocations: 300     # tope de paradas por request — bien por encima de los ~120 lockers/sucursales actuales
+  maxvehicles: 20       # tope de vehículos por request — bien por encima de los choferes/transportadoras actuales
+  override: ['c', 'g', 'l', 't', 'x']
+  path: ''
+  port: 3000
+  router: 'osrm'
+  timeout: 300000
+  baseurl: '/'
+routingServers:
+  osrm:
+    car:
+      host: 'osrm'       # nombre del servicio en docker-compose.yml — Docker lo resuelve solo
+      port: '5000'

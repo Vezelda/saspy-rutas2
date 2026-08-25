@@ -282,6 +282,11 @@ const Daily = {
           <div class="stat-chip" id="stat-chip">
             <strong>${active}</strong> paradas &middot; <strong>${total}</strong> paquetes
           </div>
+          <div style="display:flex;align-items:center;gap:4px;" title="Aplica esta cantidad a todas las paradas visibles (respeta la búsqueda y el filtro de tipo)">
+            <input type="number" id="bulk-qty-input" min="1" value="1"
+              style="width:56px;padding:6px 8px;border:1px solid var(--border2,#ddd);border-radius:6px;font-size:13px;">
+            <button class="btn" onclick="Daily.bulkFillPkgs()">Cargar a visibles</button>
+          </div>
           <button class="btn" onclick="Daily.doAutoAssign()">Auto-asignar</button>
           <button class="btn btn-ghost" onclick="Daily.clearPkgs()">Limpiar</button>
         </div>
@@ -302,18 +307,34 @@ const Daily = {
     this.renderPkgRows();
   },
 
+  // Paradas visibles según búsqueda + filtro de tipo del paso 2 (usado por la tabla y por la carga masiva)
+  _filteredPkgStops() {
+    const stops = Storage.getStops().filter(s => s.type !== 'DEPOT' && s.lat !== null);
+    const q     = (this.stopSearch2||'').toLowerCase();
+    return stops.filter(s => {
+      const mQ = !q || s.name.toLowerCase().includes(q) || s.city.toLowerCase().includes(q);
+      const mT = this.stopTypeFilter2 === 'ALL' || s.type === this.stopTypeFilter2;
+      return mQ && mT;
+    });
+  },
+
+  bulkFillPkgs() {
+    const qty = parseInt(document.getElementById('bulk-qty-input')?.value) || 0;
+    if (qty <= 0) { alert('Ingresá una cantidad válida (mayor a 0).'); return; }
+    const filtered = this._filteredPkgStops();
+    if (!filtered.length) { alert('No hay paradas visibles con los filtros actuales.'); return; }
+    if (!confirm(`Cargar ${qty} paquete(s) a las ${filtered.length} parada(s) visibles?\n\nEsto sobreescribe la cantidad actual de esas paradas.`)) return;
+    filtered.forEach(s => { this.session.packages[s.id] = qty; });
+    this.save();
+    this.renderPkgRows();
+  },
+
   // Solo re-renderiza las filas — el input NO se toca, no pierde foco
   renderPkgRows() {
     const tbody = document.getElementById('pkg-tbody');
     if (!tbody) return;
 
-    const stops = Storage.getStops().filter(s => s.type !== 'DEPOT' && s.lat !== null);
-    const q     = (this.stopSearch2||'').toLowerCase();
-    const filtered = stops.filter(s => {
-      const mQ = !q || s.name.toLowerCase().includes(q) || s.city.toLowerCase().includes(q);
-      const mT = this.stopTypeFilter2 === 'ALL' || s.type === this.stopTypeFilter2;
-      return mQ && mT;
-    });
+    const filtered = this._filteredPkgStops();
 
     const drivers  = Storage.getDrivers();
     const carriers = Storage.getCarriers();

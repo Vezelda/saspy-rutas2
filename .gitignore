@@ -1,0 +1,4 @@
+# Mapa procesado (pesado, se regenera con prepare-map.sh) y secretos del proxy — no van al repo.
+infra/routing-engine/data/
+infra/routing-engine/nginx/certs/
+infra/routing-engine/nginx/.htpasswd
