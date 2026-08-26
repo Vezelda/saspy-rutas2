@@ -874,7 +874,8 @@ const Daily = {
       this._mapLayers[ri] = layerGroup;
 
       const jobs = route.steps.filter(s => s.type === 'job');
-      const jobPoints = jobs.map(s => sMap[s.stopId]).filter(s => s?.lat);
+      const jobSteps  = jobs.map(s => ({ step: s, stop: sMap[s.stopId] })).filter(x => x.stop?.lat);
+      const jobPoints = jobSteps.map(x => x.stop);
 
       if (route.geometry) {
         const coords = decodePolyline(route.geometry);
@@ -892,9 +893,13 @@ const Daily = {
       // quedarian con los marcadores exactamente encimados, tapando el numero de abajo.
       // Los separamos un poquito solo para mostrarlos — la linea de la ruta usa las coords reales.
       const displayPoints = this._spreadOverlapping(jobPoints);
+      const typeClr = { SUCURSAL:'badge-sucursal', LOCKER:'badge-locker', TRANSPORTADORA:'badge-trans' };
 
       displayPoints.forEach((s, si) => {
-        const num = si + 1;
+        const num  = si + 1;
+        const step = jobSteps[si].step;
+        const qty  = this.session.packages[s.id] || 0;
+        const hours = (s.opens || s.closes) ? ((s.opens||'00:00') + '–' + (s.closes||'24:00')) : '24 horas';
         const [dx, dy] = s._pxOffset;
         const icon = L.divIcon({
           className: '',
@@ -903,9 +908,16 @@ const Daily = {
             + 'justify-content:center;font-size:11px;font-weight:700;font-family:sans-serif;">' + num + '</div>',
           iconSize: [24, 24], iconAnchor: [12 - dx, 12 - dy],
         });
-        L.marker([s.lat, s.lng], { icon }).addTo(layerGroup).bindPopup(
-          '<strong>' + num + '. ' + esc(s.name) + '</strong><br>' + esc(s.city || '')
-        );
+        const popupHtml = '<div style="min-width:170px;">'
+          + '<strong>' + num + '. ' + esc(s.name) + '</strong> '
+          + '<span class="badge ' + (typeClr[s.type]||'') + '">' + s.type + '</span>'
+          + '<div style="font-size:12px;color:#555;margin-top:4px;line-height:1.6;">'
+          + (s.city ? '📍 ' + esc(s.city) + '<br>' : '')
+          + '🕐 ' + hours + '<br>'
+          + '📦 ' + qty + ' paquete' + (qty !== 1 ? 's' : '') + '<br>'
+          + '⏱️ Llegada estimada: ' + secsToTime(step.arrival)
+          + '</div></div>';
+        L.marker([s.lat, s.lng], { icon }).addTo(layerGroup).bindPopup(popupHtml);
         allPoints.push([s.lat, s.lng]);
       });
     });
