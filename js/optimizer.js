@@ -86,12 +86,15 @@ const Optimizer = {
   // Recalcula tiempos de viaje y llegada tramo por tramo aplicando el factor de
   // tráfico vigente en el momento en que ESE tramo específico ocurre. El orden de
   // las paradas no cambia (eso ya lo decidió el solver) — solo se ajustan los horarios.
-  applyTrafficFactor(solution, depTime) {
+  // sMap: stopId -> parada, para poder seguir respetando horario de apertura acá
+  // (si no, el recargo de tráfico pisaba la espera hasta que abre y la ignoraba).
+  applyTrafficFactor(solution, depTime, sMap) {
     let time = depTime;
     return solution.map(s => {
       const factor      = this._trafficFactorAt(time);
       const adjTravel   = Math.round((s.travelTime || 0) * factor);
-      const arrival     = time + adjTravel;
+      const stop        = sMap ? sMap[s.stopId] : null;
+      const arrival     = stop ? Math.max(time + adjTravel, this._opens(stop, depTime)) : time + adjTravel;
       time = arrival + (s.service || 0);
       return { ...s, travelTime: adjTravel, arrival };
     });
@@ -165,7 +168,7 @@ const Optimizer = {
   async solveWithVroom(depot, driverStops, depTime, packages, driver, endsAtHome, vroomCfg) {
     const jobs = driverStops.map((s, i) => {
       const job = { id: i + 1, location: [s.lng, s.lat], service: this._svc(s, packages) };
-      if (s.opens || s.closes) job.time_windows = [[this._opens(s, depTime), this._closes(s, depTime)]];
+      if (s.opens || s.closes || s.hoursByDay) job.time_windows = [[this._opens(s, depTime), this._closes(s, depTime)]];
       return job;
     });
 
@@ -195,12 +198,25 @@ const Optimizer = {
 
     const route    = data.routes[0];
     const rawSteps = route.steps || [];
-    let prevDeparture = depTime;
+
+    // VROOM elige libremente CUÁNDO salir del depósito dentro de su ventana — si el
+    // primer horario es restrictivo, puede "atrasar la salida" en vez de salir a la
+    // hora fija y esperar en destino. Eso no sirve: el chofer sale a la hora que
+    // configuraste, no cuando le convenga al algoritmo. Por eso no usamos vs.arrival
+    // directo — usamos el ORDEN y el tiempo de viaje real por tramo que ya calculó
+    // (vs.duration es acumulado puro de viaje, no se corre si VROOM atrasa el inicio),
+    // y repetimos el recorrido con nuestra hora de salida fija como ancla — mismo
+    // criterio que usa el solver local (replayRoute) para que ambos caminos se
+    // comporten igual.
+    let time = depTime, prevDuration = 0;
     const steps = rawSteps.filter(s => s.type === 'job').map(vs => {
       const stop       = driverStops[vs.id - 1];
-      const travelTime = Math.max(0, vs.arrival - prevDeparture);
-      prevDeparture    = vs.arrival + (vs.waiting_time || 0) + (vs.service || 0);
-      return { stopId: stop.id, arrival: vs.arrival, service: vs.service || 0, travelTime };
+      const travelTime = Math.max(0, (vs.duration || 0) - prevDuration);
+      prevDuration     = vs.duration || 0;
+      const arrival    = Math.max(time + travelTime, this._opens(stop, depTime));
+      const service    = vs.service || 0;
+      time = arrival + service;
+      return { stopId: stop.id, arrival, service, travelTime };
     });
 
     const totalDistance = rawSteps.length ? (rawSteps[rawSteps.length - 1].distance || 0) : 0;
@@ -523,6 +539,10 @@ const Optimizer = {
 
   // ── Optimización principal ────────────────────────────────────────────
   async optimize(session, onProgress) {
+    // Día de la semana de la ruta (0=domingo..6=sábado) — usado por _opens/_closes
+    // para elegir el horario correcto en paradas con hoursByDay (horario distinto por día).
+    this._routeDay = this._dayOfWeek(session.date);
+
     const allStops = Storage.getStops();
     const drivers  = Storage.getDrivers();
     const carriers = Storage.getCarriers();
@@ -642,7 +662,8 @@ const Optimizer = {
         });
       }
 
-      solution = this.applyTrafficFactor(solution, depTime);
+      const driverStopsMap = Object.fromEntries(driverStops.map(s => [s.id, s]));
+      solution = this.applyTrafficFactor(solution, depTime, driverStopsMap);
 
       const endTime = solution.length
         ? solution[solution.length-1].arrival + solution[solution.length-1].service
@@ -1012,23 +1033,43 @@ const Optimizer = {
     return result;
   },
 
+  // 'YYYY-MM-DD' → 0=domingo..6=sábado (día calendario real de la ruta)
+  _dayOfWeek(dateStr) {
+    const d = dateStr ? new Date(dateStr + 'T12:00:00') : new Date();
+    return isNaN(d) ? new Date().getDay() : d.getDay();
+  },
+
+  // Si la parada tiene horario distinto por día (hoursByDay, ej. importado de la
+  // API de lockers) usa el de HOY (this._routeDay); si ese día no está documentado
+  // o la parada no tiene hoursByDay, cae al horario general (opens/closes de siempre).
+  _effectiveHours(s) {
+    if (s.hoursByDay && this._routeDay != null) {
+      const h = s.hoursByDay[this._routeDay];
+      if (h === null) return { opens: '00:00', closes: '00:00' }; // día marcado explícitamente cerrado
+      if (h) return h; // horario propio de ese día
+    }
+    return { opens: s.opens, closes: s.closes };
+  },
+
   // depTime: hora de salida en segundos — necesaria para rutas nocturnas
   _opens(s, depTime) {
+    const eff = this._effectiveHours(s);
     // 24h stop (opens=null): siempre abierto — nunca esperar
-    if (!s.opens) return 0;
-    const raw = timeToSecs(s.opens);
+    if (!eff.opens) return 0;
+    const raw = timeToSecs(eff.opens);
     if (!depTime) return raw;
     // Ruta nocturna: si la apertura es mañana temprano, correr al día siguiente
     return (depTime >= 18*3600 && raw < depTime && raw < 12*3600) ? raw + 86400 : raw;
   },
   _closes(s, depTime) {
+    const eff = this._effectiveHours(s);
     let raw;
-    if (!s.closes) {
+    if (!eff.closes) {
       // 24 horas: si salida nocturna, extender hasta el doble del día siguiente
       raw = (depTime >= 18*3600) ? 86400 * 2 : 86400;
     } else {
-      const c = timeToSecs(s.closes);
-      raw = (c === 0 || c <= timeToSecs(s.opens||'00:00')) ? 86400 : c;
+      const c = timeToSecs(eff.closes);
+      raw = (c === 0 || c <= timeToSecs(eff.opens||'00:00')) ? 86400 : c;
       // Corrección nocturna: si el cierre ya pasó y la apertura es mañana, sumar 86400
       if (depTime >= 18*3600 && raw < depTime && raw < 12*3600) raw += 86400;
     }
