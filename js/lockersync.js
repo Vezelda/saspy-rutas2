@@ -36,7 +36,10 @@ const LockerSync = {
   async fetchList() {
     const url = this._endpointUrl();
     if (!url) throw new Error('Configurá primero la URL del motor en Configuración → Motor de rutas.');
-    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+    const cfg = Storage.getVroomConfig();
+    const headers = { 'Content-Type': 'application/json' };
+    if (cfg?.user) headers['Authorization'] = 'Basic ' + btoa(cfg.user + ':' + (cfg.pass || ''));
+    const res = await fetch(url, { method: 'POST', headers });
     if (!res.ok) throw new Error('El servidor respondió ' + res.status);
     const data = await res.json();
     if (!Array.isArray(data.list)) throw new Error('Respuesta inesperada de la API de lockers.');
