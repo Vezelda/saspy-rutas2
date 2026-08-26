@@ -61,6 +61,42 @@ const Optimizer = {
     highway:   65,   // km/h — autopistas interiores (PY02, PY01, PY09...)
   },
 
+  // ── Tráfico estimado por franja horaria ─────────────────────────────────
+  // NO es tráfico en vivo (eso requeriría un proveedor pago tipo Google/TomTom).
+  // Es un supuesto fijo de cuánto más lento es viajar en cada franja del día,
+  // ajustá los "factor" según lo que se observe realmente en la calle.
+  // Se aplica tramo por tramo, según la hora real en que ocurre cada tramo
+  // (no solo la hora de salida) — un tramo a las 13:30 sí lleva su recargo.
+  TRAFFIC_BANDS: [
+    { from: 6.0  * 3600, to: 7.0  * 3600, factor: 1.05 }, // temprano
+    { from: 7.0  * 3600, to: 8.5  * 3600, factor: 1.30 }, // pico mañana
+    { from: 8.5  * 3600, to: 11.5 * 3600, factor: 1.00 },
+    { from: 11.5 * 3600, to: 13.5 * 3600, factor: 1.20 }, // almuerzo / centro
+    { from: 13.5 * 3600, to: 17.0 * 3600, factor: 1.00 },
+    { from: 17.0 * 3600, to: 19.5 * 3600, factor: 1.35 }, // pico tarde
+    { from: 19.5 * 3600, to: 22.0 * 3600, factor: 1.05 },
+  ],
+
+  _trafficFactorAt(secs) {
+    const t = secs % 86400; // por si la ruta cruza medianoche
+    const band = this.TRAFFIC_BANDS.find(b => t >= b.from && t < b.to);
+    return band ? band.factor : 1.0; // de noche / madrugada: sin recargo
+  },
+
+  // Recalcula tiempos de viaje y llegada tramo por tramo aplicando el factor de
+  // tráfico vigente en el momento en que ESE tramo específico ocurre. El orden de
+  // las paradas no cambia (eso ya lo decidió el solver) — solo se ajustan los horarios.
+  applyTrafficFactor(solution, depTime) {
+    let time = depTime;
+    return solution.map(s => {
+      const factor      = this._trafficFactorAt(time);
+      const adjTravel   = Math.round((s.travelTime || 0) * factor);
+      const arrival     = time + adjTravel;
+      time = arrival + (s.service || 0);
+      return { ...s, travelTime: adjTravel, arrival };
+    });
+  },
+
   // ── Haversine (km) ─────────────────────────────────────────────────────
   haversine(a, b) {
     const R = 6371, r = Math.PI / 180;
@@ -606,13 +642,15 @@ const Optimizer = {
         });
       }
 
+      solution = this.applyTrafficFactor(solution, depTime);
+
       const endTime = solution.length
         ? solution[solution.length-1].arrival + solution[solution.length-1].service
         : depTime;
 
       const rawSteps = [
         { type:'start', arrival:depTime, stopId:null },
-        ...solution.map(s => ({ type:'job', arrival:s.arrival, service:s.service, stopId:s.stopId })),
+        ...solution.map(s => ({ type:'job', arrival:s.arrival, service:s.service, stopId:s.stopId, travelTime:s.travelTime })),
         { type:'end', arrival:endTime, stopId:null },
       ];
       // Default: interior drivers get 4h breaks even if session was saved before this feature
