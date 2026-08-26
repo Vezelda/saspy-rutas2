@@ -624,8 +624,15 @@ const Daily = {
     const unassignHtml = unassign.length ? `
       <div class="unassigned-panel">
         <div class="unassigned-title">&#9888; ${unassign.length} parada(s) sin asignar</div>
-        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:.5rem;">
-          ${unassign.map(u => { const s=sMap[u.stopId]; return s?'<span class="unassigned-chip">'+esc(s.name)+'</span>':''; }).join('')}
+        <div style="display:flex;flex-direction:column;gap:4px;margin-top:.5rem;">
+          ${unassign.map(u => {
+            const s = sMap[u.stopId];
+            if (!s) return '';
+            return '<div style="font-size:12px;">'
+              + '<span class="unassigned-chip">' + esc(s.name) + '</span>'
+              + (u.reason ? ' <span style="color:#92400e;">— ' + esc(u.reason) + '</span>' : '')
+              + '</div>';
+          }).join('')}
         </div>
       </div>` : '';
 

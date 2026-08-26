@@ -194,7 +194,16 @@ const Optimizer = {
     if (!res.ok) throw new Error('El motor respondió ' + res.status);
     const data = await res.json();
     if (data.code !== 0) throw new Error(data.error || 'El motor no pudo resolver la ruta');
-    if (!data.routes || !data.routes.length) return { steps: [], distance: 0 };
+
+    // VROOM puede decidir que una parada NO entra en el día de este chofer (choca con
+    // otra ventana horaria, o directamente no hay tiempo físico) y la manda a su propia
+    // lista de "unassigned" en vez de forzarla — hay que rescatar esos ids, si no
+    // desaparecen en silencio (ni en la ruta, ni en el aviso de "sin asignar").
+    const vroomUnassigned = (data.unassigned || [])
+      .map(u => driverStops[u.id - 1]?.id)
+      .filter(Boolean);
+
+    if (!data.routes || !data.routes.length) return { steps: [], distance: 0, unassigned: vroomUnassigned };
 
     const route    = data.routes[0];
     const rawSteps = route.steps || [];
@@ -220,7 +229,7 @@ const Optimizer = {
     });
 
     const totalDistance = rawSteps.length ? (rawSteps[rawSteps.length - 1].distance || 0) : 0;
-    return { steps, distance: totalDistance, geometry: route.geometry || null };
+    return { steps, distance: totalDistance, geometry: route.geometry || null, unassigned: vroomUnassigned };
   },
 
   // ── Matriz local Haversine (fallback sin API) ──────────────────────────
@@ -627,7 +636,14 @@ const Optimizer = {
           solution = result.steps;
           totalDist = result.distance;
           routeGeometry = result.geometry;
-          onProgress && onProgress(done, totalDrivers, (driver?.name||'?') + ' (motor propio ✓)');
+          if (result.unassigned && result.unassigned.length) {
+            result.unassigned.forEach(stopId => {
+              allUnassigned.push({ stopId, reason: 'No entra en el día de ' + (driver?.name || 'este chofer') + ' (horarios/tiempo no alcanzan)' });
+            });
+            onProgress && onProgress(done, totalDrivers, (driver?.name||'?') + ` (motor propio ✓, ${result.unassigned.length} no entraron)`);
+          } else {
+            onProgress && onProgress(done, totalDrivers, (driver?.name||'?') + ' (motor propio ✓)');
+          }
         } catch(e) {
           onProgress && onProgress(done, totalDrivers, (driver?.name||'?') + ' ⚠️ motor propio falló: ' + e.message);
         }
