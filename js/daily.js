@@ -809,10 +809,16 @@ const Daily = {
       }
 
       jobPoints.forEach((s, si) => {
-        L.circleMarker([s.lat, s.lng], {
-          radius: 7, color: '#fff', weight: 2, fillColor: color, fillOpacity: 1,
-        }).addTo(layerGroup).bindPopup(
-          '<strong>' + (si + 1) + '. ' + esc(s.name) + '</strong><br>' + esc(s.city || '')
+        const num  = si + 1;
+        const icon = L.divIcon({
+          className: '',
+          html: '<div style="background:' + color + ';color:#fff;width:24px;height:24px;border-radius:50%;'
+            + 'border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.4);display:flex;align-items:center;'
+            + 'justify-content:center;font-size:11px;font-weight:700;font-family:sans-serif;">' + num + '</div>',
+          iconSize: [24, 24], iconAnchor: [12, 12],
+        });
+        L.marker([s.lat, s.lng], { icon }).addTo(layerGroup).bindPopup(
+          '<strong>' + num + '. ' + esc(s.name) + '</strong><br>' + esc(s.city || '')
         );
         allPoints.push([s.lat, s.lng]);
       });
