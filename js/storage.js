@@ -8,6 +8,7 @@ const KEYS = {
   carriers: 'saspy_carriers',
   settings: 'saspy_settings',
   vroom:    'saspy_vroom_config',
+  dailyHistory: 'saspy_daily_history',
 };
 
 const Storage = {
@@ -138,6 +139,24 @@ const Storage = {
   },
   clearVroomConfig() {
     localStorage.removeItem(KEYS.vroom);
+  },
+
+  // ── Historial de rutas del día ─────────────────────────────────────────
+  getDailyHistory() {
+    try { return JSON.parse(localStorage.getItem(KEYS.dailyHistory) || '[]'); }
+    catch(e) { return []; }
+  },
+  // Guarda (o reemplaza, si ya existe una entrada para esa fecha) la sesión del día.
+  archiveDailySession(session) {
+    if (!session || !session.date) return;
+    const history = this.getDailyHistory().filter(h => h.date !== session.date);
+    history.push({ ...session, archivedAt: new Date().toISOString() });
+    history.sort((a, b) => b.date.localeCompare(a.date));
+    localStorage.setItem(KEYS.dailyHistory, JSON.stringify(history));
+  },
+  deleteDailyHistoryEntry(date) {
+    const history = this.getDailyHistory().filter(h => h.date !== date);
+    localStorage.setItem(KEYS.dailyHistory, JSON.stringify(history));
   },
 
   // ── Transportadoras ───────────────────────────────────────────────────

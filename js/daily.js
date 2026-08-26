@@ -8,9 +8,11 @@ const Daily = {
   stopTypeFilter2: 'ALL',
   dragRI: null,
   dragSI: null,
+  _viewingHistory: false,
 
   // ── Sesion ────────────────────────────────────────────────────────────────
   init() {
+    this._viewingHistory = false;
     const saved = localStorage.getItem('saspy_daily');
     try { this.session = saved ? JSON.parse(saved) : this.fresh(); }
     catch(e) { this.session = this.fresh(); }
@@ -30,14 +32,75 @@ const Daily = {
     };
   },
 
-  save() { localStorage.setItem('saspy_daily', JSON.stringify(this.session)); },
+  // Mientras se está viendo el historial (solo lectura) no se persiste nada
+  // en la sesión del día actual — evita que un drag/borrar sobrescriba lo real.
+  save() {
+    if (this._viewingHistory) return;
+    localStorage.setItem('saspy_daily', JSON.stringify(this.session));
+  },
 
   newDay() {
     if (!confirm('Empezar un nuevo dia? Se borrara la sesion actual.')) return;
+    if (this.session?.results) Storage.archiveDailySession(this.session);
     localStorage.removeItem('saspy_daily');
     this.session = this.fresh();
     this.step = 1;
     this.render();
+  },
+
+  // ── Historial ────────────────────────────────────────────────────────────
+  showHistory() {
+    const history = Storage.getDailyHistory();
+    const rows = history.map(h => {
+      const nDrivers = (h.assignments||[]).length + (h.carrierAssignments||[]).length;
+      const nStops   = (h.results||[]).reduce((sum, r) => sum + r.steps.filter(s=>s.type==='job').length, 0);
+      const km       = (h.results||[]).reduce((sum, r) => sum + (r.distance||0), 0) / 1000;
+      return `<tr>
+        <td>${esc(fmtDate(h.date))}</td>
+        <td>${nDrivers}</td>
+        <td>${nStops}</td>
+        <td>${km.toFixed(0)} km</td>
+        <td class="td-actions">
+          <button class="btn-sm btn-ghost" onclick="Daily.viewHistoryEntry('${h.date}')">Ver</button>
+          <button class="btn-sm btn-danger" onclick="Daily.deleteHistoryEntry('${h.date}')">Borrar</button>
+        </td>
+      </tr>`;
+    }).join('');
+
+    App.showModal(`
+      <div class="modal-header"><h2>Historial de rutas</h2></div>
+      <div class="modal-body">
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th>Fecha</th><th>Choferes</th><th>Paradas</th><th>Distancia</th><th>Acciones</th></tr></thead>
+            <tbody>${rows || '<tr><td colspan="5" class="empty-row">Todavía no hay días archivados</td></tr>'}</tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" onclick="App.closeModal()">Cerrar</button>
+      </div>
+    `);
+  },
+
+  viewHistoryEntry(date) {
+    const entry = Storage.getDailyHistory().find(h => h.date === date);
+    if (!entry) return;
+    App.closeModal();
+    this.session = JSON.parse(JSON.stringify(entry)); // copia — no tocar el original
+    this._viewingHistory = true;
+    this.step = 4;
+    this.render();
+  },
+
+  deleteHistoryEntry(date) {
+    if (!confirm('¿Borrar el historial del ' + fmtDate(date) + '? No se puede deshacer.')) return;
+    Storage.deleteDailyHistoryEntry(date);
+    this.showHistory();
+  },
+
+  exitHistoryView() {
+    this.init(); // recarga la sesión real del día actual desde localStorage
   },
 
   // ── Render principal ──────────────────────────────────────────────────────
@@ -51,11 +114,17 @@ const Daily = {
           <p>Selecciona choferes, carga paquetes y genera las rutas.</p>
         </div>
         <div style="display:flex;gap:8px;align-items:center;">
-          <input type="date" id="daily-date" value="${this.session.date}"
+          <input type="date" id="daily-date" value="${this.session.date}" ${this._viewingHistory?'disabled':''}
             onchange="Daily.session.date=this.value; Daily.save();" class="date-input">
-          <button class="btn" onclick="Daily.newDay()">Nuevo dia</button>
+          <button class="btn" onclick="Daily.showHistory()">Historial</button>
+          <button class="btn" onclick="Daily.newDay()" ${this._viewingHistory?'disabled':''}>Nuevo dia</button>
         </div>
       </div>
+      ${this._viewingHistory ? `
+        <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 14px;margin-bottom:1rem;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+          <span style="font-size:13px;color:#1e40af;">📅 Viendo el historial del <strong>${esc(fmtDate(this.session.date))}</strong> — solo lectura</span>
+          <button class="btn btn-sm" onclick="Daily.exitHistoryView()">Volver al día de hoy</button>
+        </div>` : ''}
       <div class="step-bar">
         ${STEPS.map((l,i) => `
           <div class="step-item ${this.step===i+1?'active':this.step>i+1?'done':''}">
@@ -637,6 +706,7 @@ const Daily = {
       }
 
       const jobs = route.steps.filter(s => s.type === 'job');
+      const isHistory = this._viewingHistory;
       let jobIdx = 0;
       const stopsHtml = route.steps.filter(s => s.type === 'job' || s.type === 'break').map((step, rawIdx) => {
         if (step.type === 'break') {
@@ -650,18 +720,18 @@ const Daily = {
         const stop = sMap[step.stopId];
         if (!stop) return '';
         const qty = this.session.packages[stop.id] || 0;
-        return '<div class="route-stop" draggable="true"'
+        return '<div class="route-stop"' + (isHistory ? '' : ' draggable="true"'
           + ' ondragstart="Daily.ds(' + ri + ',' + si + ')"'
           + ' ondragover="Daily.dov(event,' + ri + ',' + si + ')"'
           + ' ondrop="Daily.dp(event,' + ri + ',' + si + ')"'
-          + ' ondragend="Daily.de()"'
+          + ' ondragend="Daily.de()"')
           + ' id="rs-' + ri + '-' + si + '">'
           + '<div class="rs-num">' + (si+1) + '</div>'
           + '<div style="flex:1;min-width:0;">'
           + '<div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(stop.name) + '</div>'
           + '<div style="font-size:11px;color:var(--text3);">' + esc(stop.city) + ' &middot; ' + qty + ' paquete' + (qty!==1?'s':'') + '</div>'
           + '<div style="font-size:10px;color:#666;margin-top:2px;">'
-            + (step.travelTime ? 'Viaje: ' + Math.round(step.travelTime/60) + ' min' : '') 
+            + (step.travelTime ? 'Viaje: ' + Math.round(step.travelTime/60) + ' min' : '')
             + (step.service ? (step.travelTime ? ' • ' : '') + 'Servicio: ' + Math.round(step.service/60) + ' min' : '')
           + '</div>'
           + '</div>'
@@ -669,7 +739,7 @@ const Daily = {
           + (step.arrival ? '<span style="font-size:12px;color:var(--text2);">' + secsToTime(step.arrival) + (step.arrival>=86400 ? ' <span style="font-size:10px;background:#fef3c7;color:#92400e;padding:1px 4px;border-radius:3px;border:1px solid #fde68a;">+1</span>' : '') + '</span>' : '')
           + (stop.mapsUrl ? '<a href="' + esc(stop.mapsUrl) + '" target="_blank" class="maps-lnk">mapa</a>' : '')
           + '<span class="badge ' + (typeClr[stop.type]||'') + '">' + stop.type + '</span>'
-          + '<button class="rm-stop-btn" onclick="Daily.removeStop(' + ri + ',' + si + ')" title="Quitar">&#215;</button>'
+          + (isHistory ? '' : '<button class="rm-stop-btn" onclick="Daily.removeStop(' + ri + ',' + si + ')" title="Quitar">&#215;</button>')
           + '</div>'
           + '</div>';
       }).join('');
@@ -685,12 +755,16 @@ const Daily = {
         + '</div>';
     }).join('');
 
+    const navBtns = this._viewingHistory
+      ? `<button class="btn" onclick="Daily.exitHistoryView()">&#8592; Volver al día de hoy</button>`
+      : `<button class="btn" onclick="Daily.step=2; Daily.render()">&#8592; Volver</button>
+         <button class="btn" onclick="Daily.step=3; Daily.render()">Reoptimizar</button>`;
+
     document.getElementById('step-content').innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;gap:8px;flex-wrap:wrap;">
-        <p style="color:var(--text2);font-size:13px;">Podés arrastrar paradas para reordenarlas.</p>
+        <p style="color:var(--text2);font-size:13px;">${this._viewingHistory ? 'Vista de solo lectura.' : 'Podés arrastrar paradas para reordenarlas.'}</p>
         <div style="display:flex;gap:8px;">
-          <button class="btn" onclick="Daily.step=2; Daily.render()">&#8592; Volver</button>
-          <button class="btn" onclick="Daily.step=3; Daily.render()">Reoptimizar</button>
+          ${navBtns}
           <button class="btn" onclick="Daily.showRouteMap()">🗺️ Ver mapa</button>
           <button class="btn btn-primary" onclick="Printer.printAll()">Imprimir todo</button>
         </div>
