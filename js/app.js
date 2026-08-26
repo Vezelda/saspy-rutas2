@@ -241,6 +241,20 @@ const App = {
     }
   },
 
+  async deleteAllLockers() {
+    const lockers = Storage.getStops().filter(s => s.type === 'LOCKER');
+    if (!lockers.length) { showToast('No hay lockers cargados.', 'warning'); return; }
+    const ok = await showConfirm(
+      `¿Borrar los ${lockers.length} lockers actuales? Esta acción no se puede deshacer.\nLas sucursales, transportadoras y el depósito NO se tocan.`,
+      { danger: true, okLabel: `Borrar ${lockers.length} lockers` }
+    );
+    if (!ok) return;
+    Storage.saveStops(Storage.getStops().filter(s => s.type !== 'LOCKER'));
+    this.renderTabContent();
+    this.updateTabCounts();
+    showToast(`✅ ${lockers.length} lockers borrados. Corré "Sincronizar lockers" para traerlos de nuevo desde la API.`, 'success', 8000);
+  },
+
   // ── Tab: Paradas ─────────────────────────────────────────────────────────
   buildStopsTab() {
     const stops = Storage.getStops();
@@ -284,6 +298,9 @@ const App = {
           ` : '<span class="all-coords">✓ Todas las paradas tienen coordenadas</span>'}
           <button class="btn" id="sync-lockers-btn" onclick="App.syncLockers()" title="Trae lockers nuevos/actualizados desde la API de Saspy Express">
             🔄 Sincronizar lockers
+          </button>
+          <button class="btn btn-danger" onclick="App.deleteAllLockers()" title="Borra TODOS los lockers actuales — las sucursales no se tocan">
+            🗑️ Borrar todos los lockers
           </button>
           <button class="btn" onclick="App.openAddStop()">+ Agregar parada</button>
         </div>
