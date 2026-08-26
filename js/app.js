@@ -128,7 +128,7 @@ const App = {
     this.stopTypeFilter = 'ALL';
     document.querySelectorAll('.tab').forEach(t => {
       t.classList.toggle('active', t.textContent.trim().startsWith(
-        { stops:'Paradas', drivers:'Choferes', vehicles:'Vehículos', apikey:'API', vroom:'Motor' }[tab]
+        { stops:'Paradas', drivers:'Choferes', vehicles:'Vehículos', carriers:'Transportadoras', apikey:'API', vroom:'Motor' }[tab]
       ));
     });
     this.renderTabContent();
