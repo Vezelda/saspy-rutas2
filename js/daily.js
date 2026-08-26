@@ -823,6 +823,28 @@ const Daily = {
     setTimeout(() => this._initRouteMap(), 60);
   },
 
+  // Agrupa paradas casi en el mismo punto (~15m, ej. locales en el mismo edificio) y les
+  // asigna un desplazamiento en PIXELES (no en coordenadas) para que el ícono se vea separado
+  // sin importar el zoom — un corrimiento en grados se vuelve invisible al alejar el mapa.
+  _spreadOverlapping(points) {
+    const TOL = 0.00015; // ~15m
+    const groups = {};
+    points.forEach((p, i) => {
+      const key = Math.round(p.lat / TOL) + '_' + Math.round(p.lng / TOL);
+      (groups[key] = groups[key] || []).push(i);
+    });
+    const result = points.map(p => ({ ...p, _pxOffset: [0, 0] }));
+    const R = 15; // px
+    Object.values(groups).forEach(idxs => {
+      if (idxs.length < 2) return;
+      idxs.forEach((idx, k) => {
+        const angle = (2 * Math.PI * k) / idxs.length - Math.PI / 2;
+        result[idx]._pxOffset = [Math.round(Math.cos(angle) * R), Math.round(Math.sin(angle) * R)];
+      });
+    });
+    return result;
+  },
+
   _initRouteMap() {
     const el = document.getElementById('route-map');
     if (!el || typeof L === 'undefined') return;
@@ -866,14 +888,20 @@ const Daily = {
         L.polyline(straight, { color, weight: 3, opacity: 0.6, dashArray: '6 6' }).addTo(layerGroup);
       }
 
-      jobPoints.forEach((s, si) => {
-        const num  = si + 1;
+      // Paradas en la misma direccion (o muy cerca, ej. locales en el mismo edificio)
+      // quedarian con los marcadores exactamente encimados, tapando el numero de abajo.
+      // Los separamos un poquito solo para mostrarlos — la linea de la ruta usa las coords reales.
+      const displayPoints = this._spreadOverlapping(jobPoints);
+
+      displayPoints.forEach((s, si) => {
+        const num = si + 1;
+        const [dx, dy] = s._pxOffset;
         const icon = L.divIcon({
           className: '',
           html: '<div style="background:' + color + ';color:#fff;width:24px;height:24px;border-radius:50%;'
             + 'border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.4);display:flex;align-items:center;'
             + 'justify-content:center;font-size:11px;font-weight:700;font-family:sans-serif;">' + num + '</div>',
-          iconSize: [24, 24], iconAnchor: [12, 12],
+          iconSize: [24, 24], iconAnchor: [12 - dx, 12 - dy],
         });
         L.marker([s.lat, s.lng], { icon }).addTo(layerGroup).bindPopup(
           '<strong>' + num + '. ' + esc(s.name) + '</strong><br>' + esc(s.city || '')

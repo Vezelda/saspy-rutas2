@@ -132,6 +132,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 .btn-ghost:hover  { background: var(--bg); border-color: var(--border); }
 .btn-danger       { border-color: transparent; background: transparent; color: var(--danger); }
 .btn-danger:hover { background: #fef2f2; border-color: #fecaca; }
+/* En tablas, "Editar"/"Borrar"/"Geocodificar" necesitan verse como botones, no como texto suelto */
+.btn-sm.btn-ghost, .btn-sm.btn-danger {
+  border-color: var(--border2); background: var(--bg2);
+}
+.btn-sm.btn-ghost:hover  { background: var(--bg); border-color: var(--text3); }
+.btn-sm.btn-danger:hover { background: #fef2f2; border-color: #fecaca; }
 .btn-danger-solid       { background: var(--danger); color: #fff; border-color: var(--danger); }
 .btn-danger-solid:hover { background: var(--danger-h); border-color: var(--danger-h); }
 
