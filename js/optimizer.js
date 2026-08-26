@@ -168,7 +168,7 @@ const Optimizer = {
     });
 
     const totalDistance = rawSteps.length ? (rawSteps[rawSteps.length - 1].distance || 0) : 0;
-    return { steps, distance: totalDistance };
+    return { steps, distance: totalDistance, geometry: route.geometry || null };
   },
 
   // ── Matriz local Haversine (fallback sin API) ──────────────────────────
@@ -563,13 +563,14 @@ const Optimizer = {
       onProgress && onProgress(done, totalDrivers, driver?.name || 'Chofer');
 
       // Prioridad: motor propio (VROOM, si está configurado) > ORS Matrix > Haversine estimado
-      let solution = null, totalDist = 0;
+      let solution = null, totalDist = 0, routeGeometry = null;
       const vroomCfg = Storage.getVroomConfig();
       if (vroomCfg && vroomCfg.url) {
         try {
           const result = await this.solveWithVroom(depot, driverStops, depTime, session.packages, driver, asgn.endsAtHome, vroomCfg);
           solution = result.steps;
           totalDist = result.distance;
+          routeGeometry = result.geometry;
           onProgress && onProgress(done, totalDrivers, (driver?.name||'?') + ' (motor propio ✓)');
         } catch(e) {
           onProgress && onProgress(done, totalDrivers, (driver?.name||'?') + ' ⚠️ motor propio falló: ' + e.message);
@@ -623,7 +624,7 @@ const Optimizer = {
 
       allRoutes.push({
         vehicleIdx: ai, duration: endTime-depTime, distance: totalDist, isCarrier: false,
-        breakInterval: breakInterval,
+        breakInterval: breakInterval, geometry: routeGeometry,
         steps: stepsWithBreaks,
       });
 

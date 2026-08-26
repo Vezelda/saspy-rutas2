@@ -691,6 +691,7 @@ const Daily = {
         <div style="display:flex;gap:8px;">
           <button class="btn" onclick="Daily.step=2; Daily.render()">&#8592; Volver</button>
           <button class="btn" onclick="Daily.step=3; Daily.render()">Reoptimizar</button>
+          <button class="btn" onclick="Daily.showRouteMap()">🗺️ Ver mapa</button>
           <button class="btn btn-primary" onclick="Printer.printAll()">Imprimir todo</button>
         </div>
       </div>
@@ -728,6 +729,105 @@ const Daily = {
     if (wpts.length > 1) url += '&waypoints=' + wpts.slice(0,-1).slice(0,9).join('|');
     url += '&travelmode=driving';
     window.open(url, '_blank');
+  },
+
+  // ── Mapa embebido (todas las rutas del día, una encima de otra) ────────────
+  ROUTE_COLORS: ['#2563eb','#dc2626','#16a34a','#d97706','#7c3aed','#0891b2','#db2777','#65a30d','#ea580c','#4f46e5'],
+
+  showRouteMap() {
+    const routes = this.session.results || [];
+    if (!routes.length) { alert('Todavía no hay rutas generadas.'); return; }
+
+    const legendItems = routes.map((route, ri) => {
+      const color = this.ROUTE_COLORS[ri % this.ROUTE_COLORS.length];
+      const label = route.isCarrier
+        ? (route.carrierName || 'Transportadora')
+        : (Storage.getDrivers().find(d => d.id === this.session.assignments[route.vehicleIdx]?.driverId)?.name || 'Chofer');
+      return `<label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;">
+        <input type="checkbox" checked data-route-idx="${ri}" onchange="Daily._toggleMapRoute(${ri}, this.checked)">
+        <span style="width:12px;height:12px;border-radius:50%;background:${color};display:inline-block;"></span>
+        ${esc(label)}
+      </label>`;
+    }).join('');
+
+    App.showModal(`
+      <div class="modal-header"><h2>Mapa de rutas del día</h2></div>
+      <div class="modal-body" style="padding:0;">
+        <div style="display:flex;flex-wrap:wrap;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border2,#e5e5e5);">
+          ${legendItems}
+        </div>
+        <div id="route-map" style="height:65vh;width:100%;"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" onclick="App.closeModal()">Cerrar</button>
+      </div>
+    `);
+    setTimeout(() => this._initRouteMap(), 60);
+  },
+
+  _initRouteMap() {
+    const el = document.getElementById('route-map');
+    if (!el || typeof L === 'undefined') return;
+
+    const stops = Storage.getStops();
+    const sMap  = Object.fromEntries(stops.map(s => [s.id, s]));
+    const depot = stops.find(s => s.type === 'DEPOT');
+    const routes = this.session.results || [];
+
+    const map = L.map(el);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap',
+      maxZoom: 19,
+    }).addTo(map);
+    this._mapLayers = {};
+
+    const allPoints = [];
+    if (depot?.lat) {
+      L.marker([depot.lat, depot.lng], { title: 'CDD — ' + depot.name })
+        .addTo(map).bindPopup('<strong>' + esc(depot.name) + '</strong><br>Depósito');
+      allPoints.push([depot.lat, depot.lng]);
+    }
+
+    routes.forEach((route, ri) => {
+      const color = this.ROUTE_COLORS[ri % this.ROUTE_COLORS.length];
+      const layerGroup = L.layerGroup().addTo(map);
+      this._mapLayers[ri] = layerGroup;
+
+      const jobs = route.steps.filter(s => s.type === 'job');
+      const jobPoints = jobs.map(s => sMap[s.stopId]).filter(s => s?.lat);
+
+      if (route.geometry) {
+        const coords = decodePolyline(route.geometry);
+        if (coords.length) {
+          L.polyline(coords, { color, weight: 4, opacity: 0.75 }).addTo(layerGroup);
+          coords.forEach(c => allPoints.push(c));
+        }
+      } else if (jobPoints.length) {
+        // Sin trazado real del motor (se usó el estimador de respaldo) — línea recta entre paradas
+        const straight = [depot?.lat ? [depot.lat, depot.lng] : null, ...jobPoints.map(s => [s.lat, s.lng])].filter(Boolean);
+        L.polyline(straight, { color, weight: 3, opacity: 0.6, dashArray: '6 6' }).addTo(layerGroup);
+      }
+
+      jobPoints.forEach((s, si) => {
+        L.circleMarker([s.lat, s.lng], {
+          radius: 7, color: '#fff', weight: 2, fillColor: color, fillOpacity: 1,
+        }).addTo(layerGroup).bindPopup(
+          '<strong>' + (si + 1) + '. ' + esc(s.name) + '</strong><br>' + esc(s.city || '')
+        );
+        allPoints.push([s.lat, s.lng]);
+      });
+    });
+
+    if (allPoints.length) map.fitBounds(allPoints, { padding: [30, 30] });
+    else map.setView([-25.2637, -57.5759], 12); // Asunción, por si no hay coordenadas
+
+    this._map = map;
+  },
+
+  _toggleMapRoute(ri, visible) {
+    const layer = this._mapLayers?.[ri];
+    if (!layer || !this._map) return;
+    if (visible) layer.addTo(this._map); else this._map.removeLayer(layer);
   },
 
   // ── Drag & Drop ───────────────────────────────────────────────────────────
