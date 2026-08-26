@@ -42,7 +42,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   border-bottom: 1px solid var(--border);
   margin-bottom: .5rem;
 }
-.logo-icon   { font-size: 22px; }
+.logo-icon   { width: 28px; height: 28px; object-fit: contain; flex-shrink: 0; }
 .logo-title  { font-size: 14px; font-weight: 600; }
 .logo-sub    { font-size: 11px; color: var(--text3); }
 
