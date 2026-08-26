@@ -325,7 +325,7 @@ const Daily = {
 
   // Paradas visibles según búsqueda + filtro de tipo del paso 2 (usado por la tabla y por la carga masiva)
   _filteredPkgStops() {
-    const stops = Storage.getStops().filter(s => s.type !== 'DEPOT' && s.lat !== null);
+    const stops = Storage.getStops().filter(s => s.type !== 'DEPOT' && s.lat !== null && s.active !== false);
     const q     = (this.stopSearch2||'').toLowerCase();
     return stops.filter(s => {
       const mQ = !q || s.name.toLowerCase().includes(q) || s.city.toLowerCase().includes(q);

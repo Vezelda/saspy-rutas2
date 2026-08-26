@@ -28,7 +28,7 @@ const Geocode = {
   // onProgress(current, total, stopName) — callback de progreso
   async geocodeAll(apiKey, onProgress) {
     const stops = Storage.getStops();
-    const pending = stops.filter(s => s.lat === null && s.type !== 'DEPOT');
+    const pending = stops.filter(s => s.lat === null && s.type !== 'DEPOT' && s.active !== false);
     const total = pending.length;
     let done = 0;
     let errors = [];

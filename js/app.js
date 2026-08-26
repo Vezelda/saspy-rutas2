@@ -186,35 +186,66 @@ const App = {
       const mT = (this.stopTypeFilter || 'ALL') === 'ALL' || s.type === this.stopTypeFilter;
       return mQ && mT;
     });
-    const clr = { DEPOT:'badge-depot', SUCURSAL:'badge-sucursal', LOCKER:'badge-locker', TRANSPORTADORA:'badge-trans' };
     if (!filtered.length) {
       tbody.innerHTML = '<tr><td colspan="5" class="empty-row">Sin resultados</td></tr>';
       return;
     }
-    tbody.innerHTML = filtered.map(s =>
-      '<tr>' +
-      '<td class="td-name"><div class="stop-name">' + esc(s.name||'') + '</div>' +
-        '<div class="stop-sub">' + esc(s.city||'') + ' · ' + esc(s.dept||'') + '</div></td>' +
-      '<td><span class="badge ' + (clr[s.type]||'') + '">' + s.type + '</span></td>' +
-      '<td class="td-hours">' + (s.opens||'00:00') + ' – ' + (s.closes||'24:00') + '</td>' +
-      '<td class="td-coords">' + (s.lat !== null && s.lat !== undefined
-        ? '<span class="coord-ok">✓ ' + Number(s.lat).toFixed(4) + ', ' + Number(s.lng).toFixed(4) + '</span>'
-        : '<span class="coord-missing">Sin coordenadas</span>') + '</td>' +
-      '<td class="td-actions">' +
-        (s.lat === null && s.type !== 'DEPOT'
-          ? '<button class="btn-sm btn-ghost" onclick="App.geocodeSingle(\'' + s.id + '\')">Geocodificar</button>' : '') +
-        '<button class="btn-sm btn-ghost" onclick="App.openEditStop(\'' + s.id + '\')">Editar</button>' +
-        (s.type !== 'DEPOT'
-          ? '<button class="btn-sm btn-danger" onclick="App.deleteStop(\'' + s.id + '\')">Borrar</button>' : '') +
-      '</td></tr>'
-    ).join('');
+    tbody.innerHTML = filtered.map(s => this._stopRowHtml(s)).join('');
+  },
+
+  // Fila de la tabla de Paradas — compartida entre el render inicial y el refresco por búsqueda/filtro.
+  _stopRowHtml(s) {
+    const typeColors = { DEPOT:'badge-depot', SUCURSAL:'badge-sucursal', LOCKER:'badge-locker', TRANSPORTADORA:'badge-trans' };
+    const inactive = s.active === false;
+    return '<tr' + (inactive ? ' style="opacity:.55;"' : '') + '>'
+      + '<td class="td-name"><div class="stop-name">' + esc(s.name||'')
+        + (inactive ? ' <span class="badge" style="background:#f3f4f6;color:#6b7280;">Inactivo</span>' : '') + '</div>'
+        + '<div class="stop-sub">' + esc(s.city||'') + ' · ' + esc(s.dept||'') + '</div></td>'
+      + '<td><span class="badge ' + (typeColors[s.type]||'') + '">' + s.type + '</span></td>'
+      + '<td class="td-hours">' + (s.opens||'00:00') + ' – ' + (s.closes||'24:00') + '</td>'
+      + '<td class="td-coords">' + (s.lat !== null && s.lat !== undefined
+          ? '<span class="coord-ok">✓ ' + Number(s.lat).toFixed(4) + ', ' + Number(s.lng).toFixed(4) + '</span>'
+          : '<span class="coord-missing">Sin coordenadas</span>') + '</td>'
+      + '<td class="td-actions">'
+        + (s.lat === null && s.type !== 'DEPOT'
+            ? '<button class="btn-sm btn-ghost" onclick="App.geocodeSingle(\'' + s.id + '\')">Geocodificar</button>' : '')
+        + '<button class="btn-sm btn-ghost" onclick="App.openEditStop(\'' + s.id + '\')">Editar</button>'
+        + (inactive ? '<button class="btn-sm btn-ghost" onclick="App.reactivateStop(\'' + s.id + '\')">Reactivar</button>' : '')
+        + (s.type !== 'DEPOT' ? '<button class="btn-sm btn-danger" onclick="App.deleteStop(\'' + s.id + '\')">Borrar</button>' : '')
+      + '</td></tr>';
+  },
+
+  reactivateStop(id) {
+    Storage.updateStop(id, { active: true });
+    this.renderTabContent();
+    showToast('Parada reactivada.', 'success');
+  },
+
+  async syncLockers() {
+    const btn = document.getElementById('sync-lockers-btn');
+    if (btn) { btn.disabled = true; btn.textContent = '🔄 Sincronizando...'; }
+    try {
+      const r = await LockerSync.sync();
+      let msg = `✅ ${r.total} lockers en la API — ${r.added} nuevos, ${r.updated} actualizados`;
+      if (r.deactivated) msg += `, ${r.deactivated} desactivados (ya no están en la API)`;
+      showToast(msg, 'success', 8000);
+      if (r.needsReview) {
+        showToast(`⚠ ${r.needsReview} lockers tienen horario en texto libre — el horario cargado es una aproximación, revisalo a mano si hace falta.`, 'warning', 9000);
+      }
+      this.renderTabContent();
+      this.updateTabCounts();
+    } catch(e) {
+      showToast('Error al sincronizar lockers: ' + e.message, 'error');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '🔄 Sincronizar lockers'; }
+    }
   },
 
   // ── Tab: Paradas ─────────────────────────────────────────────────────────
   buildStopsTab() {
     const stops = Storage.getStops();
     const vehicles = Storage.getVehicles();
-    const noCoords = stops.filter(s => s.lat === null && s.type !== 'DEPOT').length;
+    const noCoords = stops.filter(s => s.lat === null && s.type !== 'DEPOT' && s.active !== false).length;
 
     const filtered = stops.filter(s => {
       const q = this.stopSearch.toLowerCase();
@@ -226,38 +257,7 @@ const App = {
       return matchSearch && matchType;
     });
 
-    const typeColors = {
-      DEPOT: 'badge-depot', SUCURSAL: 'badge-sucursal',
-      LOCKER: 'badge-locker', TRANSPORTADORA: 'badge-trans'
-    };
-
-    const rows = filtered.map(s => `
-      <tr>
-        <td class="td-name">
-          <div class="stop-name">${esc(s.name)}</div>
-          <div class="stop-sub">${esc(s.city)} · ${esc(s.dept)}</div>
-        </td>
-        <td><span class="badge ${typeColors[s.type]||''}">${s.type}</span></td>
-        <td class="td-hours">${s.opens||'00:00'} – ${s.closes||'24:00'}</td>
-        <td class="td-coords">
-          ${s.lat !== null
-            ? `<span class="coord-ok">✓ ${s.lat.toFixed(4)}, ${s.lng.toFixed(4)}</span>`
-            : `<span class="coord-missing">Sin coordenadas</span>`
-          }
-        </td>
-        <td class="td-actions">
-          ${s.lat === null && s.type !== 'DEPOT'
-            ? `<button class="btn-sm btn-ghost" onclick="App.geocodeSingle('${s.id}')">Geocodificar</button>`
-            : ''
-          }
-          <button class="btn-sm btn-ghost" onclick="App.openEditStop('${s.id}')">Editar</button>
-          ${s.type !== 'DEPOT'
-            ? `<button class="btn-sm btn-danger" onclick="App.deleteStop('${s.id}')">Borrar</button>`
-            : ''
-          }
-        </td>
-      </tr>
-    `).join('');
+    const rows = filtered.map(s => this._stopRowHtml(s)).join('');
 
     return `
       <div class="toolbar">
@@ -282,6 +282,9 @@ const App = {
               </button>
             </div>
           ` : '<span class="all-coords">✓ Todas las paradas tienen coordenadas</span>'}
+          <button class="btn" id="sync-lockers-btn" onclick="App.syncLockers()" title="Trae lockers nuevos/actualizados desde la API de Saspy Express">
+            🔄 Sincronizar lockers
+          </button>
           <button class="btn" onclick="App.openAddStop()">+ Agregar parada</button>
         </div>
       </div>
@@ -658,7 +661,7 @@ const App = {
     const key = Storage.getApiKey();
     if (!key) { showToast('Primero configurá tu API Key en la pestaña "API Key ORS".', 'warning'); return; }
     const stops = Storage.getStops();
-    const pending = stops.filter(s => s.lat === null && s.type !== 'DEPOT').length;
+    const pending = stops.filter(s => s.lat === null && s.type !== 'DEPOT' && s.active !== false).length;
 
     this.showModal(`
       <div class="modal-header"><h2>Geocodificar todas las paradas</h2></div>
