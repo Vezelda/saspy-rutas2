@@ -674,6 +674,11 @@ const Daily = {
         </div>
       </div>` : '';
 
+    // Nombre corto de cada ruta — usado en el desplegable "Mover a" de cada parada
+    const routeLabels = routes.map(route => route.isCarrier
+      ? (route.carrierName || 'Transportadora')
+      : (dMap[this.session.assignments[route.vehicleIdx]?.driverId]?.name || 'Chofer'));
+
     const routeCards = routes.map((route, ri) => {
       let headerHtml, footerBtns;
 
@@ -746,6 +751,13 @@ const Daily = {
           + (step.arrival ? '<span style="font-size:12px;color:var(--text2);">' + secsToTime(step.arrival) + (step.arrival>=86400 ? ' <span style="font-size:10px;background:#fef3c7;color:#92400e;padding:1px 4px;border-radius:3px;border:1px solid #fde68a;">+1</span>' : '') + '</span>' : '')
           + (stop.mapsUrl ? '<a href="' + esc(stop.mapsUrl) + '" target="_blank" class="maps-lnk">mapa</a>' : '')
           + '<span class="badge ' + (typeClr[stop.type]||'') + '">' + stop.type + '</span>'
+          + (isHistory ? '' : (
+              '<select class="move-to-sel" title="Mover a otro chofer/transportadora, sin arrastrar"'
+              + ' onchange="if(this.value!==\'\')Daily.moveStop(' + ri + ',' + si + ',parseInt(this.value)); this.value=\'\';">'
+              + '<option value="">Mover a…</option>'
+              + routeLabels.map((label, ti) => ti === ri ? '' : '<option value="' + ti + '">' + esc(label) + '</option>').join('')
+              + '</select>'
+            ))
           + (isHistory ? '' : '<button class="rm-stop-btn" onclick="Daily.removeStop(' + ri + ',' + si + ')" title="Quitar">&#215;</button>')
           + '</div>'
           + '</div>';
@@ -789,6 +801,31 @@ const Daily = {
     let jobCount = 0;
     route.steps = route.steps.filter(s => { if (s.type!=='job') return true; return jobCount++ !== si; });
     this.save(); this.renderStep4();
+  },
+
+  // Manda una parada a otra ruta sin arrastrar — útil cuando el chofer destino
+  // queda lejos en la pantalla. Se agrega al final de esa ruta; los horarios no
+  // se recalculan solos, usá "Reoptimizar" después si hace falta.
+  moveStop(fromRi, si, toRi) {
+    if (fromRi === toRi) return;
+    const fromRoute = this.session.results?.[fromRi];
+    const toRoute    = this.session.results?.[toRi];
+    if (!fromRoute || !toRoute) return;
+    const fromJobs = fromRoute.steps.filter(s => s.type === 'job');
+    const toJobs    = toRoute.steps.filter(s => s.type === 'job');
+    const [moved]   = fromJobs.splice(si, 1);
+    if (!moved) return;
+    toJobs.push(moved);
+    const rebuild = (route, jobs) => {
+      const start = route.steps.find(s => s.type === 'start');
+      const end   = route.steps.find(s => s.type === 'end');
+      route.steps = [start, ...jobs, end].filter(Boolean);
+    };
+    rebuild(fromRoute, fromJobs);
+    rebuild(toRoute, toJobs);
+    this.save(); this.renderStep4();
+    const stop = Storage.getStops().find(s => s.id === moved.stopId);
+    showToast(`${stop?.name || 'Parada'} movida — los horarios de esa ruta no se recalcularon solos, usá "Reoptimizar" si hace falta.`, 'info', 6000);
   },
 
   openMaps(ri) {
