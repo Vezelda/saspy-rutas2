@@ -150,10 +150,8 @@ const Daily = {
   renderStep1() {
     const drivers  = Storage.getDrivers();
     const vehicles = Storage.getVehicles();
-    const carriers = Storage.getCarriers();
     const vMap     = Object.fromEntries(vehicles.map(v => [v.id, v]));
     const asgMap   = Object.fromEntries(this.session.assignments.map(a => [a.driverId, a]));
-    const caMap    = Object.fromEntries((this.session.carrierAssignments||[]).map(a => [a.carrierId, a]));
 
     const driverCards = drivers.map(d => {
       const a   = asgMap[d.id] || { driverId:d.id, vehicleId:d.defaultVehicle, departureTime:'06:00', endsAtHome:d.canEndAtHome||false };
@@ -215,50 +213,11 @@ const Daily = {
         </div>`;
     }).join('');
 
-    const carrierCards = carriers.length ? `
-      <p style="font-size:13px;font-weight:500;margin:1rem 0 .5rem;color:var(--text2);">Transportadoras hoy</p>
-      <div class="driver-grid">
-        ${carriers.map(c => {
-          const on = !!caMap[c.id];
-          const caAsgn = this.session.carrierAssignments?.find(a => a.carrierId === c.id);
-        const deliveryDriverId = caAsgn?.deliveryDriverId || '';
-        const driverOpts = '<option value="">Sin asignar</option>' +
-          this.session.assignments.map(a => {
-            const d = Storage.getDrivers().find(x => x.id === a.driverId);
-            return '<option value="' + a.driverId + '"' + (deliveryDriverId === a.driverId ? ' selected' : '') + '>'
-              + esc(d?.name || a.driverId) + '</option>';
-          }).join('');
-        return `
-            <div class="driver-card ${on?'active':''}" id="cc-${c.id}">
-              <div class="driver-card-header">
-                <div style="display:flex;align-items:center;gap:10px;">
-                  <div class="driver-avatar" style="background:#fef3c7;color:#92400e;">T</div>
-                  <div>
-                    <div class="driver-name">${esc(c.name)}</div>
-                    <div class="driver-veh-label">${esc(c.contact||'Transportadora externa')}</div>
-                  </div>
-                </div>
-                <label class="toggle-wrap">
-                  <input type="checkbox" ${on?'checked':''} onchange="Daily.toggleCarrier('${c.id}',this.checked)">
-                  <span class="toggle-slider"></span>
-                </label>
-              </div>
-              ${on ? `<div style="padding:8px 12px;border-top:1px solid var(--border2);">
-                <label style="font-size:11px;color:var(--text2);display:block;margin-bottom:4px;">Chofer que deposita</label>
-                <select style="width:100%;font-size:12px;" onchange="Daily.setCarrierDriver('${c.id}',this.value)">
-                  ${driverOpts}
-                </select>
-              </div>` : ''}
-            </div>`;
-        }).join('')}
-      </div>` : '';
-
     document.getElementById('step-content').innerHTML = `
       <p style="color:var(--text2);font-size:13px;margin-bottom:1rem;">
         Activa los choferes que salen hoy y configura su vehiculo y hora de salida.
       </p>
       <div class="driver-grid">${driverCards}</div>
-      ${carrierCards}
       <div class="step-footer">
         <div></div>
         <button class="btn btn-primary" onclick="Daily.goStep2()">
@@ -285,19 +244,6 @@ const Daily = {
     this.save();
   },
 
-  toggleCarrier(id, on) {
-    if (!this.session.carrierAssignments) this.session.carrierAssignments = [];
-    if (on) {
-      if (!this.session.carrierAssignments.some(a => a.carrierId === id))
-        this.session.carrierAssignments.push({ carrierId: id, deliveryDriverId: null });
-    } else {
-      this.session.carrierAssignments = this.session.carrierAssignments.filter(a => a.carrierId !== id);
-    }
-    const card = document.getElementById('cc-' + id);
-    if (card) card.classList.toggle('active', on);
-    this.save();
-  },
-
   updateAsgn(driverId, field, value) {
     const idx = this.session.assignments.findIndex(a => a.driverId === driverId);
     if (idx === -1) return;
@@ -312,8 +258,8 @@ const Daily = {
   },
 
   goStep2() {
-    if (!this.session.assignments.length && !(this.session.carrierAssignments||[]).length) {
-      alert('Selecciona al menos un chofer o transportadora.'); return;
+    if (!this.session.assignments.length && !Storage.getCarriers().length) {
+      alert('Selecciona al menos un chofer.'); return;
     }
     // Diagnóstico: verificar paradas sin geocodificar
     const allStops = Storage.getStops();
@@ -360,6 +306,7 @@ const Daily = {
           <button class="btn btn-ghost" onclick="Daily.clearPkgs()">Limpiar</button>
         </div>
       </div>
+      <div id="carrier-delivery-panel">${this._buildCarrierDeliveryPanel()}</div>
       <div class="table-wrap" style="max-height:52vh;overflow-y:auto;">
         <table class="data-table">
           <thead>
@@ -454,6 +401,41 @@ const Daily = {
     const active = Object.values(this.session.packages).filter(v=>v>0).length;
     const chip   = document.getElementById('stat-chip');
     if (chip) chip.innerHTML = '<strong>' + active + '</strong> paradas &middot; <strong>' + total + '</strong> paquetes';
+
+    const carrierPanel = document.getElementById('carrier-delivery-panel');
+    if (carrierPanel) carrierPanel.innerHTML = this._buildCarrierDeliveryPanel();
+  },
+
+  // Transportadoras con al menos 1 paquete asignado hoy — elegí quién les lleva (opcional)
+  _buildCarrierDeliveryPanel() {
+    const carriers = Storage.getCarriers();
+    const activeIds = new Set(
+      Object.entries(this.session.stopAssignments || {})
+        .filter(([stopId, assignedId]) => (this.session.packages[stopId]||0) > 0 && carriers.some(c => c.id === assignedId))
+        .map(([, assignedId]) => assignedId)
+    );
+    const active = carriers.filter(c => activeIds.has(c.id));
+    if (!active.length) return '';
+
+    const drivers = Storage.getDrivers();
+    const cards = active.map(c => {
+      const ca = (this.session.carrierAssignments||[]).find(a => a.carrierId === c.id);
+      const deliveryDriverId = ca?.deliveryDriverId || '';
+      const opts = '<option value="">Sin chofer — ellos retiran</option>' + this.session.assignments.map(a => {
+        const d = drivers.find(x => x.id === a.driverId);
+        return '<option value="' + a.driverId + '"' + (deliveryDriverId===a.driverId?' selected':'') + '>'
+          + esc(d?.name || a.driverId) + '</option>';
+      }).join('');
+      return '<div style="min-width:220px;">'
+        + '<label style="font-size:11px;color:var(--text2);display:block;margin-bottom:2px;">' + esc(c.name) + '</label>'
+        + '<select style="width:100%;font-size:12px;" onchange="Daily.setCarrierDriver(\'' + c.id + '\', this.value)">' + opts + '</select>'
+        + '</div>';
+    }).join('');
+
+    return '<div style="margin:0 0 1rem;padding:12px 16px;background:#fefce8;border:1px solid #fde047;border-radius:8px;">'
+      + '<p style="font-size:12px;font-weight:600;color:#854d0e;margin-bottom:8px;">🚚 Transportadoras con paquetes hoy — ¿quién les lleva? (opcional)</p>'
+      + '<div style="display:flex;flex-wrap:wrap;gap:12px;">' + cards + '</div>'
+      + '</div>';
   },
 
   onSearch(val) {
@@ -508,6 +490,8 @@ const Daily = {
     this.save();
     const sel = document.querySelector('select[data-id="' + stopId + '"]');
     if (sel) sel.classList.toggle('sel-warn', !value && (this.session.packages[stopId]||0) > 0);
+    const carrierPanel = document.getElementById('carrier-delivery-panel');
+    if (carrierPanel) carrierPanel.innerHTML = this._buildCarrierDeliveryPanel();
   },
 
   doAutoAssign() {
