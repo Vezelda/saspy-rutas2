@@ -803,9 +803,17 @@ const Daily = {
     this.save(); this.renderStep4();
   },
 
+  // El chofer/transportadora "dueño" de una ruta de resultados, para poder
+  // actualizar stopAssignments cuando una parada cambia de ruta (a mano o
+  // arrastrando) — si no se actualiza eso, "Reoptimizar" vuelve a leer la
+  // asignación vieja y el cambio se pierde apenas se regenera.
+  _routeOwnerId(route) {
+    if (!route) return null;
+    return route.isCarrier ? route.carrierId : this.session.assignments[route.vehicleIdx]?.driverId;
+  },
+
   // Manda una parada a otra ruta sin arrastrar — útil cuando el chofer destino
-  // queda lejos en la pantalla. Se agrega al final de esa ruta; los horarios no
-  // se recalculan solos, usá "Reoptimizar" después si hace falta.
+  // queda lejos en la pantalla. Se agrega al final de esa ruta.
   moveStop(fromRi, si, toRi) {
     if (fromRi === toRi) return;
     const fromRoute = this.session.results?.[fromRi];
@@ -823,9 +831,13 @@ const Daily = {
     };
     rebuild(fromRoute, fromJobs);
     rebuild(toRoute, toJobs);
+
+    const targetId = this._routeOwnerId(toRoute);
+    if (targetId) this.session.stopAssignments[moved.stopId] = targetId;
+
     this.save(); this.renderStep4();
     const stop = Storage.getStops().find(s => s.id === moved.stopId);
-    showToast(`${stop?.name || 'Parada'} movida — los horarios de esa ruta no se recalcularon solos, usá "Reoptimizar" si hace falta.`, 'info', 6000);
+    showToast(`${stop?.name || 'Parada'} movida y reasignada de verdad — "Reoptimizar" ahora sí la va a tener en cuenta.`, 'success', 6000);
   },
 
   openMaps(ri) {
@@ -1024,8 +1036,13 @@ const Daily = {
       const end   = route.steps.find(s => s.type==='end');
       route.steps = [start, ...jobs, end].filter(Boolean);
     };
-    if (ri===this.dragRI) { rebuild(fromRoute, fromJobs); }
-    else { rebuild(fromRoute, fromJobs); rebuild(toRoute, toJobs); }
+    if (ri===this.dragRI) {
+      rebuild(fromRoute, fromJobs);
+    } else {
+      rebuild(fromRoute, fromJobs); rebuild(toRoute, toJobs);
+      const targetId = this._routeOwnerId(toRoute);
+      if (targetId) this.session.stopAssignments[moved.stopId] = targetId;
+    }
     this.dragRI = null; this.dragSI = null;
     this.save(); this.renderStep4();
   },
