@@ -54,10 +54,10 @@ const App = {
     document.getElementById('import-file-input')?.click();
   },
 
-  importData(event) {
+  async importData(event) {
     const file = event.target.files?.[0];
     if (!file) return;
-    if (!confirm('Importar reemplazará TODAS las paradas, choferes, vehículos y transportadoras actuales por las del archivo. ¿Continuar?')) {
+    if (!(await showConfirm('Importar reemplazará TODAS las paradas, choferes, vehículos y transportadoras actuales por las del archivo. ¿Continuar?', { danger: true, okLabel: 'Sí, importar y reemplazar' }))) {
       event.target.value = '';
       return;
     }
@@ -65,15 +65,15 @@ const App = {
     reader.onload = () => {
       try {
         Storage.importAll(JSON.parse(reader.result));
-        alert('✅ Datos importados correctamente.');
+        showToast('✅ Datos importados correctamente.', 'success');
         this.renderConfig();
       } catch(e) {
-        alert('Error al importar: ' + e.message);
+        showToast('Error al importar: ' + e.message, 'error');
       } finally {
         event.target.value = '';
       }
     };
-    reader.onerror = () => alert('No se pudo leer el archivo.');
+    reader.onerror = () => showToast('No se pudo leer el archivo.', 'error');
     reader.readAsText(file);
   },
 
@@ -465,7 +465,7 @@ const App = {
     const latRaw  = document.getElementById('fc-lat')?.value;
     const lngRaw  = document.getElementById('fc-lng')?.value;
     const notes   = document.getElementById('fc-notes')?.value?.trim();
-    if (!name) { alert('El nombre es obligatorio.'); return; }
+    if (!name) { showToast('El nombre es obligatorio.', 'error'); return; }
     const fields = { name, contact, phone, address, lat: latRaw?parseFloat(latRaw):null, lng: lngRaw?parseFloat(lngRaw):null, notes };
     if (existingId) Storage.updateCarrier(existingId, fields);
     else Storage.addCarrier({...fields, id:''});
@@ -474,9 +474,9 @@ const App = {
     this.updateTabCounts();
   },
 
-  deleteCarrier(id) {
+  async deleteCarrier(id) {
     const c = Storage.getCarriers().find(x=>x.id===id);
-    if (!c||!confirm('¿Borrar la transportadora "'+c.name+'"?')) return;
+    if (!c || !(await showConfirm('¿Borrar la transportadora "'+c.name+'"?', { danger: true, okLabel: 'Borrar' }))) return;
     Storage.deleteCarrier(id);
     this.renderTabContent();
     this.updateTabCounts();
@@ -528,9 +528,9 @@ const App = {
 
   saveApiKey() {
     const val = document.getElementById('ors-key-input')?.value?.trim();
-    if (!val) return alert('Ingresá una clave válida.');
+    if (!val) return showToast('Ingresá una clave válida.', 'error');
     Storage.setApiKey(val);
-    alert('✅ Clave guardada correctamente.');
+    showToast('✅ Clave guardada correctamente.', 'success');
   },
 
   async testApiKey() {
@@ -595,13 +595,13 @@ const App = {
     const url  = document.getElementById('vroom-url-input')?.value?.trim();
     const user = document.getElementById('vroom-user-input')?.value?.trim();
     const pass = document.getElementById('vroom-pass-input')?.value || '';
-    if (!url) return alert('Ingresá la URL del motor.');
+    if (!url) return showToast('Ingresá la URL del motor.', 'error');
     Storage.setVroomConfig({ url, user, pass });
-    alert('✅ Configuración guardada.');
+    showToast('✅ Configuración guardada.', 'success');
   },
 
-  clearVroomConfig() {
-    if (!confirm('¿Dejar de usar el motor propio y volver al calculador interno?')) return;
+  async clearVroomConfig() {
+    if (!(await showConfirm('¿Dejar de usar el motor propio y volver al calculador interno?', { okLabel: 'Sí, quitar' }))) return;
     Storage.clearVroomConfig();
     this.renderTabContent();
   },
@@ -639,7 +639,7 @@ const App = {
   // ── Geocodificación ───────────────────────────────────────────────────────
   async geocodeSingle(stopId) {
     const key = Storage.getApiKey();
-    if (!key) { alert('Primero configurá tu API Key en la pestaña "API Key ORS".'); return; }
+    if (!key) { showToast('Primero configurá tu API Key en la pestaña "API Key ORS".', 'warning'); return; }
     const btn = event.target;
     btn.disabled = true;
     btn.textContent = '⏳';
@@ -648,7 +648,7 @@ const App = {
       this.renderTabContent();
       this.updateTabCounts();
     } catch(e) {
-      alert(`Error al geocodificar: ${e.message}`);
+      showToast(`Error al geocodificar: ${e.message}`, 'error');
       btn.disabled = false;
       btn.textContent = 'Geocodificar';
     }
@@ -656,7 +656,7 @@ const App = {
 
   openGeocodeAll() {
     const key = Storage.getApiKey();
-    if (!key) { alert('Primero configurá tu API Key en la pestaña "API Key ORS".'); return; }
+    if (!key) { showToast('Primero configurá tu API Key en la pestaña "API Key ORS".', 'warning'); return; }
     const stops = Storage.getStops();
     const pending = stops.filter(s => s.lat === null && s.type !== 'DEPOT').length;
 
@@ -832,7 +832,7 @@ const App = {
     const notes       = document.getElementById('f-notes')?.value?.trim();
     const linkedCId   = document.getElementById('f-carrier')?.value || '';
 
-    if (!name) { alert('El nombre es obligatorio.'); return; }
+    if (!name) { showToast('El nombre es obligatorio.', 'error'); return; }
 
     const fields = {
       name, address, city, dept, type,
@@ -854,10 +854,10 @@ const App = {
     this.updateTabCounts();
   },
 
-  deleteStop(id) {
+  async deleteStop(id) {
     const stop = Storage.getStops().find(s => s.id === id);
     if (!stop) return;
-    if (!confirm(`¿Borrar "${stop.name}"? Esta acción no se puede deshacer.`)) return;
+    if (!(await showConfirm(`¿Borrar "${stop.name}"? Esta acción no se puede deshacer.`, { danger: true, okLabel: 'Borrar' }))) return;
     Storage.deleteStop(id);
     this.renderTabContent();
     this.updateTabCounts();
@@ -951,9 +951,9 @@ const App = {
 
   async geocodeDriverHome(driverId) {
     const key = Storage.getApiKey();
-    if (!key) { alert('Primero configurá tu API Key en la pestaña "API Key ORS".'); return; }
+    if (!key) { showToast('Primero configurá tu API Key en la pestaña "API Key ORS".', 'warning'); return; }
     const addr = document.getElementById('fd-homeaddr')?.value?.trim();
-    if (!addr) { alert('Ingresá la dirección de la casa primero.'); return; }
+    if (!addr) { showToast('Ingresá la dirección de la casa primero.', 'error'); return; }
     const btn = event.target;
     btn.disabled = true; btn.textContent = '⏳ Geocodificando...';
     try {
@@ -964,7 +964,7 @@ const App = {
       if (lngInput) lngInput.value = coords.lng;
       btn.textContent = `✓ ${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}`;
     } catch(e) {
-      alert(`Error: ${e.message}`);
+      showToast(`Error: ${e.message}`, 'error');
       btn.disabled = false; btn.textContent = '📍 Geocodificar dirección';
     }
   },
@@ -978,7 +978,7 @@ const App = {
     const homeLng   = document.getElementById('fd-homelng')?.value;
     const notes     = document.getElementById('fd-notes')?.value?.trim();
     const corridor   = document.getElementById('fd-corridor')?.value || null;
-    if (!name) { alert('El nombre es obligatorio.'); return; }
+    if (!name) { showToast('El nombre es obligatorio.', 'error'); return; }
     const fields = {
       name, defaultVehicle: vehicle, notes,
       corridor: corridor || null,
@@ -993,9 +993,9 @@ const App = {
     this.renderTabContent();
     this.updateTabCounts();
   },
-  deleteDriver(id) {
+  async deleteDriver(id) {
     const d = Storage.getDrivers().find(d => d.id === id);
-    if (!d || !confirm(`¿Borrar al chofer "${d.name}"?`)) return;
+    if (!d || !(await showConfirm(`¿Borrar al chofer "${d.name}"?`, { danger: true, okLabel: 'Borrar' }))) return;
     Storage.deleteDriver(id);
     this.renderTabContent();
     this.updateTabCounts();
@@ -1049,7 +1049,7 @@ const App = {
     const type  = document.getElementById('fv-type')?.value;
     const plate = document.getElementById('fv-plate')?.value?.trim();
     const notes = document.getElementById('fv-notes')?.value?.trim();
-    if (!name) { alert('El nombre es obligatorio.'); return; }
+    if (!name) { showToast('El nombre es obligatorio.', 'error'); return; }
     const fields = { name, type, plate, notes };
     if (existingId) Storage.updateVehicle(existingId, fields);
     else Storage.addVehicle({ ...fields, id: '' });
@@ -1057,9 +1057,9 @@ const App = {
     this.renderTabContent();
     this.updateTabCounts();
   },
-  deleteVehicle(id) {
+  async deleteVehicle(id) {
     const v = Storage.getVehicles().find(v => v.id === id);
-    if (!v || !confirm(`¿Borrar el vehículo "${v.name}"?`)) return;
+    if (!v || !(await showConfirm(`¿Borrar el vehículo "${v.name}"?`, { danger: true, okLabel: 'Borrar' }))) return;
     Storage.deleteVehicle(id);
     this.renderTabContent();
     this.updateTabCounts();

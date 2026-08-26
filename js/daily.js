@@ -39,8 +39,8 @@ const Daily = {
     localStorage.setItem('saspy_daily', JSON.stringify(this.session));
   },
 
-  newDay() {
-    if (!confirm('Empezar un nuevo dia? Se borrara la sesion actual.')) return;
+  async newDay() {
+    if (!(await showConfirm('Empezar un nuevo día? Se guardará en el historial y se borrará la sesión actual.', { okLabel: 'Sí, empezar nuevo día' }))) return;
     if (this.session?.results) Storage.archiveDailySession(this.session);
     localStorage.removeItem('saspy_daily');
     this.session = this.fresh();
@@ -93,8 +93,8 @@ const Daily = {
     this.render();
   },
 
-  deleteHistoryEntry(date) {
-    if (!confirm('¿Borrar el historial del ' + fmtDate(date) + '? No se puede deshacer.')) return;
+  async deleteHistoryEntry(date) {
+    if (!(await showConfirm('¿Borrar el historial del ' + fmtDate(date) + '? No se puede deshacer.', { danger: true, okLabel: 'Borrar' }))) return;
     Storage.deleteDailyHistoryEntry(date);
     this.showHistory();
   },
@@ -259,15 +259,15 @@ const Daily = {
 
   goStep2() {
     if (!this.session.assignments.length && !Storage.getCarriers().length) {
-      alert('Selecciona al menos un chofer.'); return;
+      showToast('Seleccioná al menos un chofer.', 'warning'); return;
     }
     // Diagnóstico: verificar paradas sin geocodificar
     const allStops = Storage.getStops();
     const missingCoords = allStops.filter(s => s.lat === null || s.lng === null);
     if (missingCoords.length > 0) {
       const list = missingCoords.map(s => '• ' + s.name).join('\n');
-      const msg = missingCoords.length + ' parada(s) sin coordenadas:\n\n' + list + '\n\nVas a Configuración → Paradas para geocodificarlas.';
-      alert(msg);
+      const msg = missingCoords.length + ' parada(s) sin coordenadas:\n' + list + '\nVas a Configuración → Paradas para geocodificarlas.';
+      showToast(msg, 'warning', 7000);
     }
     this.step = 2; this.render();
   },
@@ -334,12 +334,12 @@ const Daily = {
     });
   },
 
-  bulkFillPkgs() {
+  async bulkFillPkgs() {
     const qty = parseInt(document.getElementById('bulk-qty-input')?.value) || 0;
-    if (qty <= 0) { alert('Ingresá una cantidad válida (mayor a 0).'); return; }
+    if (qty <= 0) { showToast('Ingresá una cantidad válida (mayor a 0).', 'error'); return; }
     const filtered = this._filteredPkgStops();
-    if (!filtered.length) { alert('No hay paradas visibles con los filtros actuales.'); return; }
-    if (!confirm(`Cargar ${qty} paquete(s) a las ${filtered.length} parada(s) visibles?\n\nEsto sobreescribe la cantidad actual de esas paradas.`)) return;
+    if (!filtered.length) { showToast('No hay paradas visibles con los filtros actuales.', 'warning'); return; }
+    if (!(await showConfirm(`Cargar ${qty} paquete(s) a las ${filtered.length} parada(s) visibles?\nEsto sobreescribe la cantidad actual de esas paradas.`, { okLabel: 'Cargar' }))) return;
     filtered.forEach(s => { this.session.packages[s.id] = qty; });
     this.save();
     this.renderPkgRows();
@@ -467,8 +467,8 @@ const Daily = {
     this.setPkg(id, Math.max(0, cur + delta));
   },
 
-  clearPkgs() {
-    if (!confirm('Limpiar todos los paquetes?')) return;
+  async clearPkgs() {
+    if (!(await showConfirm('Limpiar todos los paquetes?', { okLabel: 'Limpiar' }))) return;
     this.session.packages = {}; this.save(); this.renderPkgRows();
   },
 
@@ -500,26 +500,26 @@ const Daily = {
     this.renderPkgRows();
   },
 
-  goStep3() {
+  async goStep3() {
     const active = Object.entries(this.session.packages).filter(([,v])=>v>0);
-    if (!active.length) { alert('Ingresa al menos 1 paquete para generar rutas.'); return; }
-    
+    if (!active.length) { showToast('Ingresá al menos 1 paquete para generar rutas.', 'warning'); return; }
+
     // Diagnóstico: verificar paradas sin coordenadas
     const sMap = Object.fromEntries(Storage.getStops().map(s => [s.id, s]));
     const missingCoords = active
       .map(([id]) => sMap[id])
       .filter(s => s && (s.lat === null || s.lng === null))
       .map(s => s.name);
-    
+
     if (missingCoords.length > 0) {
       const list = missingCoords.join(', ');
-      alert('⚠️ Paradas sin geocodificar:\n\n' + list + '\n\nNo se pueden calcular rutas sin coordenadas.\n\nVa a Configuración → Paradas para geocodificar.');
+      showToast('⚠️ Paradas sin geocodificar: ' + list + '\nNo se pueden calcular rutas sin coordenadas. Vas a Configuración → Paradas para geocodificar.', 'error', 7000);
       return;
     }
-    
+
     const unassigned = active.filter(([id]) => !this.session.stopAssignments?.[id]);
     if (unassigned.length) {
-      if (!confirm(unassigned.length + ' parada(s) sin asignar seran omitidas.\n\nContinuar de todas formas?')) return;
+      if (!(await showConfirm(unassigned.length + ' parada(s) sin asignar serán omitidas.\n¿Continuar de todas formas?', { okLabel: 'Continuar' }))) return;
     }
     this.session.results = null;
     this.step = 3; this.render();
@@ -778,7 +778,7 @@ const Daily = {
     const jobs   = route.steps.filter(s => s.type === 'job');
     const sMap   = Object.fromEntries(stops.map(s => [s.id, s]));
     const wpts   = jobs.map(s => sMap[s.stopId]).filter(s => s?.lat).map(s => s.lat+','+s.lng);
-    if (!wpts.length) { alert('Las paradas no tienen coordenadas.'); return; }
+    if (!wpts.length) { showToast('Las paradas no tienen coordenadas.', 'error'); return; }
     const origin = depot?.lat ? depot.lat+','+depot.lng : '';
     const dest   = asgn?.endsAtHome && driver?.homeLat ? driver.homeLat+','+driver.homeLng : origin;
     let url = 'https://www.google.com/maps/dir/?api=1';
@@ -794,7 +794,7 @@ const Daily = {
 
   showRouteMap() {
     const routes = this.session.results || [];
-    if (!routes.length) { alert('Todavía no hay rutas generadas.'); return; }
+    if (!routes.length) { showToast('Todavía no hay rutas generadas.', 'warning'); return; }
 
     const legendItems = routes.map((route, ri) => {
       const color = this.ROUTE_COLORS[ri % this.ROUTE_COLORS.length];

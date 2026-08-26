@@ -4,7 +4,7 @@ const Printer = {
 
   printAll() {
     const session = Daily?.session;
-    if (!session?.results?.length) { alert('No hay rutas generadas para imprimir.'); return; }
+    if (!session?.results?.length) { showToast('No hay rutas generadas para imprimir.', 'warning'); return; }
     session.results.forEach((_, ri) => this.printDriver(ri));
   },
 
@@ -182,7 +182,7 @@ ${mapsUrl ? `<p class="maps-link">📍 <a href="${mapsUrl}">Abrir ruta en Google
 </body></html>`;
 
     const w = window.open('', '_blank');
-    if (!w) { alert('Habilitá las ventanas emergentes para imprimir.'); return; }
+    if (!w) { showToast('Habilitá las ventanas emergentes para imprimir.', 'error'); return; }
     w.document.write(html);
     w.document.close();
   },

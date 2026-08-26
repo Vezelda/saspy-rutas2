@@ -37,6 +37,41 @@ function fmtDuration(secs) {
   return h > 0 ? h + 'h' + (m > 0 ? m + 'm' : '') : m + 'min';
 }
 
+// Reemplaza a alert(): notificación chica que aparece y se cierra sola.
+function showToast(message, type = 'info', duration = 4500) {
+  const container = document.getElementById('toast-container');
+  if (!container) return;
+  const el = document.createElement('div');
+  el.className = 'toast toast-' + type;
+  el.textContent = message;
+  container.appendChild(el);
+  setTimeout(() => {
+    el.classList.add('hide');
+    setTimeout(() => el.remove(), 200);
+  }, duration);
+}
+
+// Reemplaza a confirm(): modal estilizado, async — usar con await.
+// opts: { title, okLabel, cancelLabel, danger }
+function showConfirm(message, opts = {}) {
+  return new Promise(resolve => {
+    const okLabel     = opts.okLabel || 'Confirmar';
+    const cancelLabel = opts.cancelLabel || 'Cancelar';
+    const okClass     = opts.danger ? 'btn-danger-solid' : 'btn-primary';
+    App.showModal(`
+      <div class="modal-header"><h2>${esc(opts.title || 'Confirmar')}</h2></div>
+      <div class="modal-body"><p style="font-size:13px;color:var(--text2);line-height:1.6;white-space:pre-line;">${esc(message)}</p></div>
+      <div class="modal-footer">
+        <button class="btn" id="confirm-cancel-btn">${esc(cancelLabel)}</button>
+        <button class="btn ${okClass}" id="confirm-ok-btn">${esc(okLabel)}</button>
+      </div>
+    `);
+    const finish = (result) => { App.closeModal(); resolve(result); };
+    document.getElementById('confirm-ok-btn').onclick     = () => finish(true);
+    document.getElementById('confirm-cancel-btn').onclick = () => finish(false);
+  });
+}
+
 // Decodifica el polyline codificado que devuelve VROOM/OSRM (precisión 5) a [[lat,lng], ...]
 function decodePolyline(str) {
   let index = 0, lat = 0, lng = 0;
