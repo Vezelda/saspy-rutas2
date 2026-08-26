@@ -640,24 +640,29 @@ const Daily = {
         </div>
       </div>`;
     
-    // Diagnóstico: detectar anomalías de distancia
+    // Diagnóstico: detectar anomalías de distancia. Compara contra la distancia real
+    // en línea recta (Haversine) desde la parada anterior — no contra una velocidad
+    // asumida — porque con el motor propio los tramos de interior van a velocidad de
+    // ruta real y tardan horas legítimamente (ej. Asunción → Villarrica). Solo es
+    // sospechoso si el punto de partida y el destino están geográficamente CERCA pero
+    // el viaje tarda mucho igual — eso sí suele ser coordenadas mal cargadas.
     const anomalies = [];
     routes.forEach((route, ri) => {
       const depot = stops.find(s => s.type === 'DEPOT');
       if (!depot || route.isCarrier) return;
+      let prevLoc = depot;
       route.steps.forEach(step => {
-        if (step.type !== 'job' || !step.travelTime) return;
+        if (step.type !== 'job') return;
         const stop = sMap[step.stopId];
-        if (!stop) return;
-        // Si travelTime > 3600s (60 min) pero distancia es muy corta, hay un problema
-        // O si distancia implica > 100 km pero tiempo es < 30 min en ciudad
-        const travelMins = step.travelTime / 60;
-        // Estimación con la misma velocidad de ciudad que usa el optimizador (ver Optimizer.SPEED)
-        const estimatedKm = (travelMins * Optimizer.SPEED.city / 60);
-        // Si se ve irreal (muy lento), anotar
-        if (travelMins > 120 && estimatedKm < 100) {
-          anomalies.push(`⚠️ ${esc(stop.name)}: ${travelMins.toFixed(0)} min parece alto, verificá coords`);
+        if (!stop) { return; }
+        if (step.travelTime && stop.lat != null && prevLoc?.lat != null) {
+          const travelMins = step.travelTime / 60;
+          const straightKm  = Optimizer.haversine(prevLoc, stop);
+          if (travelMins > 120 && straightKm < 60) {
+            anomalies.push(`⚠️ ${esc(stop.name)}: ${travelMins.toFixed(0)} min pero solo ${straightKm.toFixed(0)} km en línea recta desde la parada anterior — revisá coordenadas`);
+          }
         }
+        prevLoc = stop;
       });
     });
     
