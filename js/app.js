@@ -65,6 +65,7 @@ const App = {
     reader.onload = () => {
       try {
         Storage.importAll(JSON.parse(reader.result));
+        Daily.pruneStaleStops();
         showToast('✅ Datos importados correctamente.', 'success');
         this.renderConfig();
       } catch(e) {
@@ -250,9 +251,11 @@ const App = {
     );
     if (!ok) return;
     Storage.saveStops(Storage.getStops().filter(s => s.type !== 'LOCKER'));
+    const pruned = Daily.pruneStaleStops();
     this.renderTabContent();
     this.updateTabCounts();
     showToast(`✅ ${lockers.length} lockers borrados. Corré "Sincronizar lockers" para traerlos de nuevo desde la API.`, 'success', 8000);
+    if (pruned) showToast(`La ruta del día en curso también se limpió: ${pruned} entrada(s) obsoleta(s) sacadas.`, 'info', 6000);
   },
 
   // ── Tab: Paradas ─────────────────────────────────────────────────────────
@@ -879,6 +882,7 @@ const App = {
     if (!stop) return;
     if (!(await showConfirm(`¿Borrar "${stop.name}"? Esta acción no se puede deshacer.`, { danger: true, okLabel: 'Borrar' }))) return;
     Storage.deleteStop(id);
+    Daily.pruneStaleStops();
     this.renderTabContent();
     this.updateTabCounts();
   },

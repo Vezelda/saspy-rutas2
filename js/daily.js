@@ -16,8 +16,26 @@ const Daily = {
     const saved = localStorage.getItem('saspy_daily');
     try { this.session = saved ? JSON.parse(saved) : this.fresh(); }
     catch(e) { this.session = this.fresh(); }
+    this.pruneStaleStops(); // por si se borraron paradas (ej. resincronizar lockers) desde la última vez
     this.step = this.session.results ? 4 : 1;
     this.render();
+  },
+
+  // Saca de la sesión del día paquetes/asignaciones que quedaron apuntando a
+  // paradas que ya no existen (se borraron o se reemplazaron, ej. al sincronizar
+  // lockers) — si no, se cuentan de más aunque no aparezcan en ningún lado.
+  pruneStaleStops() {
+    if (!this.session) return 0;
+    const stopIds = new Set(Storage.getStops().map(s => s.id));
+    let removed = 0;
+    Object.keys(this.session.packages || {}).forEach(id => {
+      if (!stopIds.has(id)) { delete this.session.packages[id]; removed++; }
+    });
+    Object.keys(this.session.stopAssignments || {}).forEach(id => {
+      if (!stopIds.has(id)) delete this.session.stopAssignments[id];
+    });
+    if (removed) this.save();
+    return removed;
   },
 
   fresh() {
