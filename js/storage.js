@@ -7,6 +7,7 @@ const KEYS = {
   apiKey:   'saspy_ors_key',
   carriers: 'saspy_carriers',
   settings: 'saspy_settings',
+  vroom:    'saspy_vroom_config',
 };
 
 const Storage = {
@@ -125,6 +126,18 @@ const Storage = {
   },
   setApiKey(key) {
     localStorage.setItem(KEYS.apiKey, key);
+  },
+
+  // ── Motor de rutas propio (VROOM) ─────────────────────────────────────
+  getVroomConfig() {
+    try { return JSON.parse(localStorage.getItem(KEYS.vroom) || 'null'); }
+    catch(e) { return null; }
+  },
+  setVroomConfig(cfg) {
+    localStorage.setItem(KEYS.vroom, JSON.stringify(cfg));
+  },
+  clearVroomConfig() {
+    localStorage.removeItem(KEYS.vroom);
   },
 
   // ── Transportadoras ───────────────────────────────────────────────────

@@ -122,6 +122,55 @@ const Optimizer = {
     return { durations: data.durations, distances: data.distances };
   },
 
+  // ── Motor propio (VROOM auto-hospedado): resuelve orden + tiempos reales de una ──
+  // Reemplaza fetchMatrix+solveLocal cuando hay un motor configurado en
+  // Configuración → Motor de rutas. Sin ventanas para paradas 24hs (VROOM las
+  // deja sin restricción en vez de forzar 00:00-24:00 como hacía el solver local).
+  async solveWithVroom(depot, driverStops, depTime, packages, driver, endsAtHome, vroomCfg) {
+    const jobs = driverStops.map((s, i) => {
+      const job = { id: i + 1, location: [s.lng, s.lat], service: this._svc(s, packages) };
+      if (s.opens || s.closes) job.time_windows = [[this._opens(s, depTime), this._closes(s, depTime)]];
+      return job;
+    });
+
+    const end = (endsAtHome && driver?.homeLat != null)
+      ? [driver.homeLng, driver.homeLat]
+      : [depot.lng, depot.lat];
+
+    const body = {
+      vehicles: [{
+        id: 1,
+        start: [depot.lng, depot.lat],
+        end,
+        time_window: [depTime, depTime + 21 * 3600], // margen amplio para rutas largas/nocturnas
+      }],
+      jobs,
+    };
+
+    const url = vroomCfg.url.replace(/\/+$/, '') + '/';
+    const headers = { 'Content-Type': 'application/json' };
+    if (vroomCfg.user) headers['Authorization'] = 'Basic ' + btoa(vroomCfg.user + ':' + (vroomCfg.pass || ''));
+
+    const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
+    if (!res.ok) throw new Error('El motor respondió ' + res.status);
+    const data = await res.json();
+    if (data.code !== 0) throw new Error(data.error || 'El motor no pudo resolver la ruta');
+    if (!data.routes || !data.routes.length) return { steps: [], distance: 0 };
+
+    const route    = data.routes[0];
+    const rawSteps = route.steps || [];
+    let prevDeparture = depTime;
+    const steps = rawSteps.filter(s => s.type === 'job').map(vs => {
+      const stop       = driverStops[vs.id - 1];
+      const travelTime = Math.max(0, vs.arrival - prevDeparture);
+      prevDeparture    = vs.arrival + (vs.waiting_time || 0) + (vs.service || 0);
+      return { stopId: stop.id, arrival: vs.arrival, service: vs.service || 0, travelTime };
+    });
+
+    const totalDistance = rawSteps.length ? (rawSteps[rawSteps.length - 1].distance || 0) : 0;
+    return { steps, distance: totalDistance };
+  },
+
   // ── Matriz local Haversine (fallback sin API) ──────────────────────────
   buildLocalMatrix(points, isInterior) {
     const n     = points.length;
@@ -513,34 +562,48 @@ const Optimizer = {
 
       onProgress && onProgress(done, totalDrivers, driver?.name || 'Chofer');
 
-      const points = [depot, ...driverStops];
-      let matrix;
-
-      // Obtener matriz de tiempos reales desde ORS (cuando hay API key)
-      // Sin API key → Haversine con velocidades estimadas (menos preciso)
-      let usingORS = false;
-      if (apiKey) {
+      // Prioridad: motor propio (VROOM, si está configurado) > ORS Matrix > Haversine estimado
+      let solution = null, totalDist = 0;
+      const vroomCfg = Storage.getVroomConfig();
+      if (vroomCfg && vroomCfg.url) {
         try {
-          matrix = await this.fetchMatrix(points, apiKey);
-          usingORS = true;
-          onProgress && onProgress(done, totalDrivers, (driver?.name||'?') + ' (ORS ✓)');
+          const result = await this.solveWithVroom(depot, driverStops, depTime, session.packages, driver, asgn.endsAtHome, vroomCfg);
+          solution = result.steps;
+          totalDist = result.distance;
+          onProgress && onProgress(done, totalDrivers, (driver?.name||'?') + ' (motor propio ✓)');
         } catch(e) {
-          // ORS falló — caer en Haversine con advertencia clara
-          matrix = this.buildLocalMatrix(points, isInterior);
-          onProgress && onProgress(done, totalDrivers, (driver?.name||'?') + ' ⚠️ ORS falló: ' + e.message);
+          onProgress && onProgress(done, totalDrivers, (driver?.name||'?') + ' ⚠️ motor propio falló: ' + e.message);
         }
-      } else {
-        matrix = this.buildLocalMatrix(points, isInterior);
-        onProgress && onProgress(done, totalDrivers, (driver?.name||'?') + ' (sin API Key — tiempos estimados)');
       }
 
-      const solution = this.solveLocal(driverStops, matrix, depTime, session.packages, depot, isInterior, corridor);
+      if (!solution) {
+        const points = [depot, ...driverStops];
+        let matrix;
 
-      let totalDist = 0, prevNode = 0;
-      solution.forEach(s => {
-        const idx = driverStops.findIndex(x => x.id === s.stopId);
-        if (idx >= 0) { totalDist += matrix.distances[prevNode][idx+1]; prevNode = idx+1; }
-      });
+        // Obtener matriz de tiempos reales desde ORS (cuando hay API key)
+        // Sin API key → Haversine con velocidades estimadas (menos preciso)
+        if (apiKey) {
+          try {
+            matrix = await this.fetchMatrix(points, apiKey);
+            onProgress && onProgress(done, totalDrivers, (driver?.name||'?') + ' (ORS ✓)');
+          } catch(e) {
+            // ORS falló — caer en Haversine con advertencia clara
+            matrix = this.buildLocalMatrix(points, isInterior);
+            onProgress && onProgress(done, totalDrivers, (driver?.name||'?') + ' ⚠️ ORS falló: ' + e.message);
+          }
+        } else {
+          matrix = this.buildLocalMatrix(points, isInterior);
+          onProgress && onProgress(done, totalDrivers, (driver?.name||'?') + ' (sin API Key — tiempos estimados)');
+        }
+
+        solution = this.solveLocal(driverStops, matrix, depTime, session.packages, depot, isInterior, corridor);
+
+        let prevNode = 0;
+        solution.forEach(s => {
+          const idx = driverStops.findIndex(x => x.id === s.stopId);
+          if (idx >= 0) { totalDist += matrix.distances[prevNode][idx+1]; prevNode = idx+1; }
+        });
+      }
 
       const endTime = solution.length
         ? solution[solution.length-1].arrival + solution[solution.length-1].service

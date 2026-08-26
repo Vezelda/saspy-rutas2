@@ -112,6 +112,9 @@ const App = {
         <button class="tab ${this.currentTab==='apikey'  ?'active':''}" onclick="App.switchTab('apikey')">
           API Key ORS
         </button>
+        <button class="tab ${this.currentTab==='vroom'  ?'active':''}" onclick="App.switchTab('vroom')">
+          Motor de rutas
+        </button>
       </div>
       <div id="tab-content"></div>
     `;
@@ -125,7 +128,7 @@ const App = {
     this.stopTypeFilter = 'ALL';
     document.querySelectorAll('.tab').forEach(t => {
       t.classList.toggle('active', t.textContent.trim().startsWith(
-        { stops:'Paradas', drivers:'Choferes', vehicles:'Vehículos', apikey:'API' }[tab]
+        { stops:'Paradas', drivers:'Choferes', vehicles:'Vehículos', apikey:'API', vroom:'Motor' }[tab]
       ));
     });
     this.renderTabContent();
@@ -139,6 +142,7 @@ const App = {
     if (this.currentTab === 'vehicles') el.innerHTML = this.buildVehiclesTab();
     if (this.currentTab === 'apikey')   el.innerHTML = this.buildApiKeyTab();
     if (this.currentTab === 'carriers') el.innerHTML = this.buildCarriersTab();
+    if (this.currentTab === 'vroom')    el.innerHTML = this.buildVroomTab();
   },
 
   updateTabCounts() {
@@ -541,6 +545,91 @@ const App = {
       } else {
         const err = await res.json().catch(()=>({}));
         result.innerHTML = `<p class="test-error">❌ Error: ${err.error?.message || res.status}</p>`;
+      }
+    } catch(e) {
+      result.innerHTML = `<p class="test-error">❌ No se pudo conectar: ${e.message}</p>`;
+    }
+  },
+
+  // ── Tab: Motor de rutas (VROOM auto-hospedado) ────────────────────────────
+  buildVroomTab() {
+    const cfg = Storage.getVroomConfig() || { url:'', user:'', pass:'' };
+    return `
+      <div class="api-key-panel">
+        <div class="api-card">
+          <h2>Motor de rutas propio</h2>
+          <p>
+            Si tenés un motor de optimización propio corriendo (VROOM), la app le manda ahí
+            los choferes y paradas de cada ruta en vez de usar el calculador interno.
+            Si no configurás nada acá, la app sigue funcionando igual que siempre con ORS/estimaciones locales.
+          </p>
+          <div class="api-form">
+            <label>URL del motor</label>
+            <input type="text" id="vroom-url-input" value="${esc(cfg.url||'')}"
+              placeholder="https://190.104.135.8:8443" style="font-family:monospace;">
+            <label style="margin-top:10px;">Usuario</label>
+            <input type="text" id="vroom-user-input" value="${esc(cfg.user||'')}" placeholder="admin">
+            <label style="margin-top:10px;">Contraseña</label>
+            <div class="api-input-row">
+              <input type="password" id="vroom-pass-input" value="${esc(cfg.pass||'')}" style="font-family:monospace;">
+              <button class="btn" onclick="App.toggleVroomPassVisibility()">👁</button>
+            </div>
+            <div class="api-actions">
+              <button class="btn btn-primary" onclick="App.saveVroomConfig()">Guardar</button>
+              <button class="btn" onclick="App.testVroomConfig()">Probar conexión</button>
+              <button class="btn btn-ghost" onclick="App.clearVroomConfig()">Quitar / usar calculador interno</button>
+            </div>
+            <div id="vroom-test-result"></div>
+          </div>
+        </div>
+      </div>
+    `;
+  },
+
+  toggleVroomPassVisibility() {
+    const input = document.getElementById('vroom-pass-input');
+    if (input) input.type = input.type === 'password' ? 'text' : 'password';
+  },
+
+  saveVroomConfig() {
+    const url  = document.getElementById('vroom-url-input')?.value?.trim();
+    const user = document.getElementById('vroom-user-input')?.value?.trim();
+    const pass = document.getElementById('vroom-pass-input')?.value || '';
+    if (!url) return alert('Ingresá la URL del motor.');
+    Storage.setVroomConfig({ url, user, pass });
+    alert('✅ Configuración guardada.');
+  },
+
+  clearVroomConfig() {
+    if (!confirm('¿Dejar de usar el motor propio y volver al calculador interno?')) return;
+    Storage.clearVroomConfig();
+    this.renderTabContent();
+  },
+
+  async testVroomConfig() {
+    const url  = document.getElementById('vroom-url-input')?.value?.trim();
+    const user = document.getElementById('vroom-user-input')?.value?.trim();
+    const pass = document.getElementById('vroom-pass-input')?.value || '';
+    const result = document.getElementById('vroom-test-result');
+    if (!url) { result.innerHTML = '<p class="test-error">⚠ Ingresá la URL primero.</p>'; return; }
+    result.innerHTML = '<p class="test-loading">Probando conexión...</p>';
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (user) headers['Authorization'] = 'Basic ' + btoa(user + ':' + pass);
+      const res = await fetch(url.replace(/\/+$/, '') + '/', {
+        method: 'POST', headers,
+        body: JSON.stringify({
+          vehicles: [{ id:1, start:[-57.4686,-25.2796], end:[-57.4686,-25.2796] }],
+          jobs: [{ id:1, location:[-57.5699,-25.2983] }],
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        result.innerHTML = data.code === 0
+          ? '<p class="test-ok">✅ Conexión exitosa. El motor respondió correctamente.</p>'
+          : `<p class="test-error">❌ El motor respondió con error: ${esc(data.error||'desconocido')}</p>`;
+      } else {
+        result.innerHTML = `<p class="test-error">❌ Error HTTP ${res.status} — revisá usuario/contraseña.</p>`;
       }
     } catch(e) {
       result.innerHTML = `<p class="test-error">❌ No se pudo conectar: ${e.message}</p>`;

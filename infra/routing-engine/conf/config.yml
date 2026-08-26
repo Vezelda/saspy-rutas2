@@ -1,5 +1,5 @@
 cliArgs:
-  geometry: false      # true = devuelve la polilínea de cada ruta (no la usamos todavía)
+  geometry: true       # necesario para que la respuesta incluya distancia (km) por ruta
   planmode: false
   threads: 4           # subilo si la VM tiene más vCPUs — mejora calidad de la solución
   explore: 5            # 0-5, nivel de búsqueda. 5 = mejor calidad (igual resuelve en segundos a esta escala)
