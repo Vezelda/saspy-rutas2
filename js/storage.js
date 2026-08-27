@@ -118,23 +118,23 @@ const Storage = {
     this._syncing = true;
     try {
       const results = await Promise.all(SYNCED.map(k => this._fetchKey(k)));
-      let seeded = false;
+
+      // Por cada clave: si el servidor tiene algo (no es null/vacío), eso manda.
+      // Si el servidor todavía no tiene nada para esa clave (recién desplegado,
+      // nadie la sembró todavía), NO pisamos lo que había local — lo dejamos
+      // como estaba y lo subimos nosotros como semilla inicial.
       SYNCED.forEach((k, i) => {
-        if (results[i] !== undefined) {
-          this._cache[k] = results[i];
-          localStorage.setItem(KEYS[k], JSON.stringify(results[i]));
+        const serverVal = results[i];
+        const serverEmpty = serverVal == null || (Array.isArray(serverVal) && serverVal.length === 0);
+        if (serverEmpty) {
+          const localVal = this._cache[k];
+          const localHasData = Array.isArray(localVal) ? localVal.length > 0 : (localVal != null && localVal !== '');
+          if (localHasData) this._put(k, localVal); // sembrar el servidor con lo que ya teníamos
+          return;
         }
+        this._cache[k] = serverVal;
+        localStorage.setItem(KEYS[k], JSON.stringify(serverVal));
       });
-      // Servidor recién estrenado (nadie sembró datos todavía) → sembrarlo con lo local/default
-      if (results[SYNCED.indexOf('stops')] == null || results[SYNCED.indexOf('stops')].length === 0) {
-        if (this._cache.stops && this._cache.stops.length) {
-          this._put('stops', this._cache.stops);
-          this._put('drivers', this._cache.drivers);
-          this._put('vehicles', this._cache.vehicles);
-          this._put('carriers', this._cache.carriers || []);
-          seeded = true;
-        }
-      }
       return true;
     } finally {
       this._syncing = false;
