@@ -65,19 +65,26 @@ const Storage = {
   // Optimista: la memoria (y localStorage, de respaldo) se actualizan al toque;
   // el guardado en el servidor pasa en segundo plano. Si falla, el cambio queda
   // guardado en este navegador igual, con un aviso — no se pierde nada.
+  // Guardamos la promesa en _pendingPuts para que refreshFromServer() pueda
+  // esperarla — si no, un refresco automático que cae justo en el medio podría
+  // traer la versión vieja del servidor y pisar este cambio recién hecho
+  // (lo que se ve como que "vuelve para atrás").
+  _pendingPuts: {},
   _put(key, value) {
     this._cache[key] = value;
     localStorage.setItem(KEYS[key], JSON.stringify(value));
     const base = this._apiBase();
     if (!base) return;
-    fetch(base + key, { method: 'PUT', headers: this._authHeaders(), body: JSON.stringify(value) })
+    const promise = fetch(base + key, { method: 'PUT', headers: this._authHeaders(), body: JSON.stringify(value) })
       .then(res => { if (!res.ok) throw new Error('HTTP ' + res.status); })
       .catch(e => {
         console.warn('No se pudo guardar "' + key + '" en el servidor compartido:', e.message);
         if (typeof showToast === 'function') {
           showToast('⚠ No se pudo guardar "' + key + '" en el servidor compartido — el cambio quedó solo en este navegador.', 'error', 7000);
         }
-      });
+      })
+      .finally(() => { if (this._pendingPuts[key] === promise) delete this._pendingPuts[key]; });
+    this._pendingPuts[key] = promise;
   },
 
   _getLocal(key, fallback) {
@@ -117,6 +124,11 @@ const Storage = {
     if (this._syncing) return true; // ya hay un refresh en curso, no lo dupliques
     this._syncing = true;
     try {
+      // Esperar que terminen los guardados en curso, para no traer una foto
+      // vieja del servidor y pisar con eso un cambio local recién hecho.
+      const pending = Object.values(this._pendingPuts);
+      if (pending.length) await Promise.all(pending);
+
       const results = await Promise.all(SYNCED.map(k => this._fetchKey(k)));
 
       // Por cada clave: si el servidor tiene algo (no es null/vacío), eso manda.
