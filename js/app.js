@@ -9,10 +9,35 @@ const App = {
   stopTypeFilter: 'ALL',
   editingId: null,
 
-  init() {
-    Storage.init();
+  async init() {
+    Storage.init(); // sincrónico, local — la app arranca al toque con lo que haya en este navegador
     this.renderNav();
     this.loadModule('config');
+
+    const synced = await Storage.refreshFromServer(); // si hay servidor compartido configurado, trae lo último
+    if (synced) {
+      this._rerenderCurrent();
+      this._startAutoRefresh();
+    }
+  },
+
+  // Refresca en segundo plano lo que haya cambiado en el servidor compartido
+  // (otra persona editando desde otro navegador) sin pisar un modal abierto
+  // ni un drag & drop en curso.
+  _startAutoRefresh() {
+    if (this._refreshTimer) return;
+    this._refreshTimer = setInterval(async () => {
+      const modalOpen = document.getElementById('modal-overlay')?.style.display === 'flex';
+      const dragging = typeof Daily !== 'undefined' && Daily.dragRI !== null;
+      if (modalOpen || dragging) return;
+      await Storage.refreshFromServer();
+      this._rerenderCurrent();
+    }, 15000);
+  },
+
+  _rerenderCurrent() {
+    if (this.currentModule === 'config') this.renderConfig();
+    if (this.currentModule === 'daily' && !Daily._viewingHistory) Daily.init();
   },
 
   // ── Navegación ───────────────────────────────────────────────────────────
@@ -580,12 +605,18 @@ const App = {
     return `
       <div class="api-key-panel">
         <div class="api-card">
-          <h2>Motor de rutas propio</h2>
+          <h2>Motor de rutas propio y datos compartidos</h2>
           <p>
             Si tenés un motor de optimización propio corriendo (VROOM), la app le manda ahí
             los choferes y paradas de cada ruta en vez de usar el calculador interno.
-            Si no configurás nada acá, la app sigue funcionando igual que siempre con ORS/estimaciones locales.
+            Este mismo servidor también guarda paradas, choferes, vehículos y la sesión del día
+            compartidos — configurando esto acá, todos los que abren la app desde cualquier
+            navegador ven y editan los mismos datos. Si no configurás nada, la app sigue
+            funcionando 100% local en este navegador (como siempre).
           </p>
+          ${Storage.getVroomConfig()?.url ? `<p class="${Storage._apiBase() ? 'test-ok' : 'test-error'}">
+            ${Storage._apiBase() ? '🟢 Datos compartidos configurados — se sincronizan cada 15 s.' : ''}
+          </p>` : ''}
           <div class="api-form">
             <label>URL del motor</label>
             <input type="text" id="vroom-url-input" value="${esc(cfg.url||'')}"
@@ -614,18 +645,22 @@ const App = {
     if (input) input.type = input.type === 'password' ? 'text' : 'password';
   },
 
-  saveVroomConfig() {
+  async saveVroomConfig() {
     const url  = document.getElementById('vroom-url-input')?.value?.trim();
     const user = document.getElementById('vroom-user-input')?.value?.trim();
     const pass = document.getElementById('vroom-pass-input')?.value || '';
     if (!url) return showToast('Ingresá la URL del motor.', 'error');
     Storage.setVroomConfig({ url, user, pass });
-    showToast('✅ Configuración guardada.', 'success');
+    showToast('✅ Configuración guardada. Sincronizando...', 'success');
+    const synced = await Storage.refreshFromServer();
+    if (synced) this._startAutoRefresh();
+    this.renderTabContent();
   },
 
   async clearVroomConfig() {
-    if (!(await showConfirm('¿Dejar de usar el motor propio y volver al calculador interno?', { okLabel: 'Sí, quitar' }))) return;
+    if (!(await showConfirm('¿Dejar de usar el motor propio (y los datos compartidos) y volver a trabajar 100% local en este navegador?', { okLabel: 'Sí, quitar' }))) return;
     Storage.clearVroomConfig();
+    if (this._refreshTimer) { clearInterval(this._refreshTimer); this._refreshTimer = null; }
     this.renderTabContent();
   },
 

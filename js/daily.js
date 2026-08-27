@@ -13,9 +13,8 @@ const Daily = {
   // ── Sesion ────────────────────────────────────────────────────────────────
   init() {
     this._viewingHistory = false;
-    const saved = localStorage.getItem('saspy_daily');
-    try { this.session = saved ? JSON.parse(saved) : this.fresh(); }
-    catch(e) { this.session = this.fresh(); }
+    const saved = Storage.getDailySession();
+    this.session = saved || this.fresh();
     this.pruneStaleStops(); // por si se borraron paradas (ej. resincronizar lockers) desde la última vez
     this.step = this.session.results ? 4 : 1;
     this.render();
@@ -54,13 +53,13 @@ const Daily = {
   // en la sesión del día actual — evita que un drag/borrar sobrescriba lo real.
   save() {
     if (this._viewingHistory) return;
-    localStorage.setItem('saspy_daily', JSON.stringify(this.session));
+    Storage.saveDailySession(this.session);
   },
 
   async newDay() {
     if (!(await showConfirm('Empezar un nuevo día? Se guardará en el historial y se borrará la sesión actual.', { okLabel: 'Sí, empezar nuevo día' }))) return;
     if (this.session?.results) Storage.archiveDailySession(this.session);
-    localStorage.removeItem('saspy_daily');
+    Storage.clearDailySession();
     this.session = this.fresh();
     this.step = 1;
     this.render();

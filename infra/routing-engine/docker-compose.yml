@@ -24,12 +24,23 @@ services:
       - routing
     # Tampoco expone puerto al host — solo el proxy lo alcanza por la red interna.
 
+  dataserver:
+    build: ./dataserver
+    container_name: saspy-dataserver
+    restart: unless-stopped
+    volumes:
+      - ./dataserver-data:/data
+    networks:
+      - routing
+    # Sin "ports:" — solo el proxy lo alcanza, igual que VROOM y OSRM.
+
   proxy:
     image: nginx:alpine
     container_name: vroom-proxy
     restart: unless-stopped
     depends_on:
       - vroom
+      - dataserver
     ports:
       - "8080:80"
       - "8443:443"

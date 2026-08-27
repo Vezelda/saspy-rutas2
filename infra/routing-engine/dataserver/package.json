@@ -1,0 +1,10 @@
+{
+  "name": "saspy-dataserver",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Backend chico de datos compartidos para Saspy Rutas — guarda cada tabla como un JSON en disco.",
+  "main": "server.js",
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}
