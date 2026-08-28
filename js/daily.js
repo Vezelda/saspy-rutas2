@@ -757,7 +757,7 @@ const Daily = {
         const stop = sMap[step.stopId];
         if (!stop) return '';
         const qty = this.session.packages[stop.id] || 0;
-        return '<div class="route-stop"' + (isHistory ? '' : ' draggable="true"'
+        return '<div class="route-stop"' + (step.late ? ' style="background:#fef2f2;border-left:3px solid #dc2626;"' : '') + (isHistory ? '' : ' draggable="true"'
           + ' ondragstart="Daily.ds(' + ri + ',' + si + ')"'
           + ' ondragover="Daily.dov(event,' + ri + ',' + si + ')"'
           + ' ondrop="Daily.dp(event,' + ri + ',' + si + ')"'
@@ -770,10 +770,11 @@ const Daily = {
           + '<div style="font-size:10px;color:#666;margin-top:2px;">'
             + (step.travelTime ? 'Viaje: ' + Math.round(step.travelTime/60) + ' min' : '')
             + (step.service ? (step.travelTime ? ' • ' : '') + 'Servicio: ' + Math.round(step.service/60) + ' min' : '')
+            + (step.late ? ' <span style="color:#dc2626;font-weight:600;">&#9888; Posible atraso &mdash; no entraba en el horario, estimación aproximada</span>' : '')
           + '</div>'
           + '</div>'
           + '<div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">'
-          + (step.arrival ? '<span style="font-size:12px;color:var(--text2);">' + secsToTime(step.arrival) + (step.arrival>=86400 ? ' <span style="font-size:10px;background:#fef3c7;color:#92400e;padding:1px 4px;border-radius:3px;border:1px solid #fde68a;">+1</span>' : '') + '</span>' : '')
+          + (step.arrival ? '<span style="font-size:12px;color:' + (step.late?'#dc2626;font-weight:600;':'var(--text2);') + '">' + secsToTime(step.arrival) + (step.arrival>=86400 ? ' <span style="font-size:10px;background:#fef3c7;color:#92400e;padding:1px 4px;border-radius:3px;border:1px solid #fde68a;">+1</span>' : '') + '</span>' : '')
           + (stop.mapsUrl ? '<a href="' + esc(stop.mapsUrl) + '" target="_blank" class="maps-lnk">mapa</a>' : '')
           + '<span class="badge ' + (typeClr[stop.type]||'') + '">' + stop.type + '</span>'
           + (isHistory ? '' : (
@@ -998,9 +999,10 @@ const Daily = {
         const qty  = this.session.packages[s.id] || 0;
         const hours = (s.opens || s.closes) ? ((s.opens||'00:00') + '–' + (s.closes||'24:00')) : '24 horas';
         const [dx, dy] = s._pxOffset;
+        const markerColor = step.late ? '#dc2626' : color;
         const icon = L.divIcon({
           className: '',
-          html: '<div style="background:' + color + ';color:#fff;width:24px;height:24px;border-radius:50%;'
+          html: '<div style="background:' + markerColor + ';color:#fff;width:24px;height:24px;border-radius:50%;'
             + 'border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.4);display:flex;align-items:center;'
             + 'justify-content:center;font-size:11px;font-weight:700;font-family:sans-serif;">' + num + '</div>',
           iconSize: [24, 24], iconAnchor: [12 - dx, 12 - dy],
@@ -1013,6 +1015,7 @@ const Daily = {
           + '🕐 ' + hours + '<br>'
           + '📦 ' + qty + ' paquete' + (qty !== 1 ? 's' : '') + '<br>'
           + '⏱️ Llegada estimada: ' + secsToTime(step.arrival)
+          + (step.late ? '<br><span style="color:#dc2626;font-weight:600;">⚠ Posible atraso — no entraba en el horario</span>' : '')
           + '</div></div>';
         L.marker([s.lat, s.lng], { icon }).addTo(layerGroup).bindPopup(popupHtml);
         allPoints.push([s.lat, s.lng]);

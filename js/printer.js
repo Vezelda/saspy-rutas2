@@ -54,16 +54,16 @@ const Printer = {
       }
 
       rows += `
-        <tr style="border-bottom:0.5px solid #e5e5e5;">
+        <tr style="border-bottom:0.5px solid #e5e5e5;${step.late?'background:#fef2f2;':''}">
           <td style="padding:7px 12px;font-weight:600;color:#666;text-align:center;">${i+1}</td>
-          <td style="padding:7px 12px;font-size:12px;">${esc(stop.name)}</td>
+          <td style="padding:7px 12px;font-size:12px;">${esc(stop.name)}${step.late?' <span style="color:#dc2626;font-weight:700;">⚠ POSIBLE ATRASO</span>':''}</td>
           <td style="padding:7px 12px;font-size:11px;color:#777;">${esc(stop.city)}</td>
           <td style="padding:7px 12px;font-size:12px;text-align:center;font-weight:600;">${qty}</td>
           <td style="padding:7px 12px;font-size:11px;color:#777;white-space:nowrap;">
             ${stop.opens||'00:00'} – ${stop.closes||'24:00'}
           </td>
-          <td style="padding:7px 12px;font-size:12px;color:#333;font-weight:500;white-space:nowrap;">
-            ${arrival}
+          <td style="padding:7px 12px;font-size:12px;color:${step.late?'#dc2626':'#333'};font-weight:${step.late?'700':'500'};white-space:nowrap;">
+            ${arrival}${step.late?' (aprox.)':''}
           </td>
           <td style="padding:7px 12px;">
             <span style="font-size:10px;padding:2px 6px;border-radius:3px;font-weight:500;${typeStyle}">

@@ -103,6 +103,29 @@ const Optimizer = {
     });
   },
 
+  // Cuando el motor propio (VROOM) no puede encajar una parada en la ventana
+  // de tiempo del chofer, en vez de descartarla en silencio la agrega igual
+  // al final de su ruta — con una estimación aproximada en línea recta — y
+  // la marca "late" para que se vea con aviso en la hoja de ruta. El chofer
+  // decide si realmente la hace o no; la app nunca la borra del todo.
+  _appendLateStops(solution, lateStops, startPoint, driverStopsMap, depTime, packages) {
+    let time = solution.length
+      ? solution[solution.length - 1].arrival + solution[solution.length - 1].service
+      : depTime;
+    let prevLoc = solution.length
+      ? (driverStopsMap[solution[solution.length - 1].stopId] || startPoint)
+      : startPoint;
+    for (const stop of lateStops) {
+      const distKm     = this.haversine(prevLoc, stop);
+      const travelTime = Math.round(distKm / this.SPEED.city * 3600); // estimación conservadora
+      const arrival    = time + travelTime;
+      const service    = this._svc(stop, packages);
+      solution.push({ stopId: stop.id, arrival, service, travelTime, late: true });
+      time = arrival + service;
+      prevLoc = stop;
+    }
+  },
+
   // ── Haversine (km) ─────────────────────────────────────────────────────
   haversine(a, b) {
     const R = 6371, r = Math.PI / 180;
@@ -623,6 +646,7 @@ const Optimizer = {
       if (!driverStops.length) continue;
 
       const driver     = dMap[asgn.driverId];
+      const driverStopsMap = Object.fromEntries(driverStops.map(s => [s.id, s]));
       const depTime    = timeToSecs(asgn.departureTime || '06:00');
       // Cada chofer puede salir un día calendario distinto al de la sesión
       // (ej. sesión armada el 25/08 a la tarde, pero un chofer sale recién
@@ -651,10 +675,11 @@ const Optimizer = {
           totalDist = result.distance;
           routeGeometry = result.geometry;
           if (result.unassigned && result.unassigned.length) {
-            result.unassigned.forEach(stopId => {
-              allUnassigned.push({ stopId, reason: 'No entra en el día de ' + (driver?.name || 'este chofer') + ' (horarios/tiempo no alcanzan)' });
-            });
-            onProgress && onProgress(done, totalDrivers, (driver?.name||'?') + ` (motor propio ✓, ${result.unassigned.length} no entraron)`);
+            // No se descartan: se agregan igual al final de la ruta, marcadas
+            // como posible atraso — el chofer decide si las hace o no.
+            const lateStops = result.unassigned.map(id => driverStopsMap[id]).filter(Boolean);
+            this._appendLateStops(solution, lateStops, startPoint, driverStopsMap, depTime, session.packages);
+            onProgress && onProgress(done, totalDrivers, (driver?.name||'?') + ` (motor propio ✓, ${result.unassigned.length} agregadas con aviso de atraso)`);
           } else {
             onProgress && onProgress(done, totalDrivers, (driver?.name||'?') + ' (motor propio ✓)');
           }
@@ -692,7 +717,6 @@ const Optimizer = {
         });
       }
 
-      const driverStopsMap = Object.fromEntries(driverStops.map(s => [s.id, s]));
       solution = this.applyTrafficFactor(solution, depTime, driverStopsMap);
 
       const endTime = solution.length
@@ -701,7 +725,7 @@ const Optimizer = {
 
       const rawSteps = [
         { type:'start', arrival:depTime, stopId:null },
-        ...solution.map(s => ({ type:'job', arrival:s.arrival, service:s.service, stopId:s.stopId, travelTime:s.travelTime })),
+        ...solution.map(s => ({ type:'job', arrival:s.arrival, service:s.service, stopId:s.stopId, travelTime:s.travelTime, late:!!s.late })),
         { type:'end', arrival:endTime, stopId:null },
       ];
       // Default: interior drivers get 4h breaks even if session was saved before this feature
