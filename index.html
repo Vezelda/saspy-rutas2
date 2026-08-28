@@ -10,7 +10,6 @@
 <body>
 
 <div class="layout">
-
   <!-- ── Sidebar ────────────────────────────────────────────────────── -->
   <aside class="sidebar">
     <div class="logo">
@@ -30,6 +29,10 @@
         <span>Armar ruta del día</span>
       </a>
     </nav>
+    <button class="nav-item" id="sync-btn" onclick="App.manualRefresh()" style="border:none;background:none;width:100%;text-align:left;cursor:pointer;">
+      <span class="nav-icon">🔄</span>
+      <span>Actualizar datos</span>
+    </button>
   </aside>
 
   <!-- ── Contenido principal ────────────────────────────────────────── -->
@@ -55,3 +58,5 @@
 
 </body>
 </html>
+
+

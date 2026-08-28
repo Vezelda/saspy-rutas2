@@ -13,27 +13,23 @@ const App = {
     Storage.init(); // sincrónico, local — la app arranca al toque con lo que haya en este navegador
     this.renderNav();
     this.loadModule('config');
-
-    const synced = await Storage.refreshFromServer(); // si hay servidor compartido configurado, trae lo último
-    if (synced) {
-      this._rerenderCurrent();
-      this._startAutoRefresh();
-    }
+    await Storage.refreshFromServer(); // si hay servidor compartido configurado, trae lo último
+    this._rerenderCurrent();
   },
 
-  // Refresca en segundo plano lo que haya cambiado en el servidor compartido
-  // (otra persona editando desde otro navegador) sin pisar un modal abierto
-  // ni un drag & drop en curso.
-  _startAutoRefresh() {
-    if (this._refreshTimer) return;
-    this._refreshTimer = setInterval(async () => {
-      const modalOpen = document.getElementById('modal-overlay')?.style.display === 'flex';
-      const dragging = typeof Daily !== 'undefined' && Daily.dragRI !== null;
-      const busy = typeof Daily !== 'undefined' && Daily._busy;
-      if (modalOpen || dragging || busy) return;
-      await Storage.refreshFromServer();
-      this._rerenderCurrent();
-    }, 15000);
+  // Traer lo último del servidor a pedido del usuario (botón "🔄 Actualizar
+  // datos"). Antes esto pasaba solo, cada 15s en segundo plano — pero eso
+  // causó varios bugs difíciles de rastrear (pisaba una sesión del día en
+  // pleno armado, volvía de golpe a un paso anterior). Ahora solo pasa
+  // cuando el usuario lo pide explícitamente.
+  async manualRefresh() {
+    const btn = document.getElementById('sync-btn');
+    if (btn) btn.querySelector('.nav-icon').textContent = '⏳';
+    const synced = await Storage.refreshFromServer();
+    if (btn) btn.querySelector('.nav-icon').textContent = '🔄';
+    if (!synced) { showToast('No hay servidor compartido configurado (Configuración → Motor de rutas).', 'error'); return; }
+    this._rerenderCurrent();
+    showToast('✅ Datos actualizados.', 'success');
   },
 
   _rerenderCurrent() {
@@ -658,15 +654,13 @@ const App = {
     if (!url) return showToast('Ingresá la URL del motor.', 'error');
     Storage.setVroomConfig({ url, user, pass });
     showToast('✅ Configuración guardada. Sincronizando...', 'success');
-    const synced = await Storage.refreshFromServer();
-    if (synced) this._startAutoRefresh();
+    await Storage.refreshFromServer();
     this.renderTabContent();
   },
 
   async clearVroomConfig() {
     if (!(await showConfirm('¿Dejar de usar el motor propio (y los datos compartidos) y volver a trabajar 100% local en este navegador?', { okLabel: 'Sí, quitar' }))) return;
     Storage.clearVroomConfig();
-    if (this._refreshTimer) { clearInterval(this._refreshTimer); this._refreshTimer = null; }
     this.renderTabContent();
   },
 
