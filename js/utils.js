@@ -1,5 +1,22 @@
 // utils.js — Helpers compartidos
 
+// Arma un mapa id→parada que TAMBIÉN resuelve las paradas "virtuales" de
+// transportadora (__carrier__<id>) que arma el optimizador al vuelo para
+// representar "entregar todo el bulto acá" — esas nunca se guardan como
+// parada real, así que sin esto quedan invisibles en el mapa, la hoja de
+// ruta, "Mover a", Google Maps y la impresión.
+function buildStopMap(stops, carriers) {
+  const sMap = Object.fromEntries(stops.map(s => [s.id, s]));
+  (carriers || []).forEach(c => {
+    sMap['__carrier__' + c.id] = {
+      id: '__carrier__' + c.id, name: 'Entregar a ' + (c.name || 'Transportadora'),
+      lat: c.lat, lng: c.lng, type: 'TRANSPORTADORA',
+      opens: c.opens || null, closes: c.closes || null, city: c.address || '', mapsUrl: '',
+    };
+  });
+  return sMap;
+}
+
 function secsToTime(secs, showDay) {
   if (secs == null || secs === undefined) return '—';
   const next = secs >= 86400;

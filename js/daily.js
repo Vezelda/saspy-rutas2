@@ -622,7 +622,7 @@ const Daily = {
     const stops    = Storage.getStops();
     const dMap     = Object.fromEntries(drivers.map(d  => [d.id, d]));
     const vMap     = Object.fromEntries(vehicles.map(v => [v.id, v]));
-    const sMap     = Object.fromEntries(stops.map(s    => [s.id, s]));
+    const sMap     = buildStopMap(stops, Storage.getCarriers());
     const routes   = this.session.results || [];
     const unassign = this.session.unassigned || [];
     const typeClr  = { SUCURSAL:'badge-sucursal', LOCKER:'badge-locker', TRANSPORTADORA:'badge-trans' };
@@ -861,7 +861,7 @@ const Daily = {
     const asgn   = this.session.assignments[route.vehicleIdx];
     const driver = Storage.getDrivers().find(d => d.id === asgn?.driverId);
     const jobs   = route.steps.filter(s => s.type === 'job');
-    const sMap   = Object.fromEntries(stops.map(s => [s.id, s]));
+    const sMap   = buildStopMap(stops, Storage.getCarriers());
     const wpts   = jobs.map(s => sMap[s.stopId]).filter(s => s?.lat).map(s => s.lat+','+s.lng);
     if (!wpts.length) { showToast('Las paradas no tienen coordenadas.', 'error'); return; }
     const origin = depot?.lat ? depot.lat+','+depot.lng : '';
@@ -935,7 +935,7 @@ const Daily = {
     if (!el || typeof L === 'undefined') return;
 
     const stops = Storage.getStops();
-    const sMap  = Object.fromEntries(stops.map(s => [s.id, s]));
+    const sMap  = buildStopMap(stops, Storage.getCarriers());
     const depot = stops.find(s => s.type === 'DEPOT');
     const routes = this.session.results || [];
 

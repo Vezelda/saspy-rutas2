@@ -15,7 +15,7 @@ const Printer = {
     const stops    = Storage.getStops();
     const drivers  = Storage.getDrivers();
     const vehicles = Storage.getVehicles();
-    const sMap     = Object.fromEntries(stops.map(s => [s.id, s]));
+    const sMap     = buildStopMap(stops, Storage.getCarriers());
     const dMap     = Object.fromEntries(drivers.map(d => [d.id, d]));
     const vMap     = Object.fromEntries(vehicles.map(v => [v.id, v]));
 
