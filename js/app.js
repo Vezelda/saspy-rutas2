@@ -38,7 +38,12 @@ const App = {
 
   _rerenderCurrent() {
     if (this.currentModule === 'config') this.renderConfig();
-    if (this.currentModule === 'daily' && !Daily._viewingHistory) Daily.init();
+    // Daily.init() siempre recalcula el paso como "session.results ? 4 : 1" —
+    // si lo llamamos mientras el usuario está armando la sesión (pasos 1-3,
+    // todavía sin resultados), lo manda de vuelta al paso 1 en pleno armado.
+    // Solo es seguro re-sincronizar automáticamente en el paso 4 (resultados
+    // ya generados) o si el módulo recién se está por cargar desde cero.
+    if (this.currentModule === 'daily' && !Daily._viewingHistory && Daily.step === 4) Daily.init();
   },
 
   // ── Navegación ───────────────────────────────────────────────────────────
