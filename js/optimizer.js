@@ -629,6 +629,12 @@ const Optimizer = {
       // el 26/08 de madrugada) — usar SU día real para elegir el horario
       // correcto en paradas con hoursByDay (horario distinto por día).
       this._routeDay   = this._dayOfWeek(asgn.departureDate || session.date);
+      // Si el chofer arranca su día desde otro lugar (ej. vive/opera en otra
+      // ciudad, como un chofer de Ciudad del Este que no viaja desde el CDD
+      // cada mañana), usar esa ubicación como punto de partida en vez del CDD.
+      const startPoint = (asgn.startsAtHome && driver?.homeLat != null)
+        ? { lat: driver.homeLat, lng: driver.homeLng }
+        : depot;
       const isInterior = driverStops.some(s => this.INTERIOR_DEPTS.has(s.dept));
       const corridorKey = this._corridorKeyFromDriver(driver);
       const corridor     = corridorKey ? this.CORRIDORS[corridorKey] : null;
@@ -640,7 +646,7 @@ const Optimizer = {
       const vroomCfg = Storage.getVroomConfig();
       if (vroomCfg && vroomCfg.url) {
         try {
-          const result = await this.solveWithVroom(depot, driverStops, depTime, session.packages, driver, asgn.endsAtHome, vroomCfg);
+          const result = await this.solveWithVroom(startPoint, driverStops, depTime, session.packages, driver, asgn.endsAtHome, vroomCfg);
           solution = result.steps;
           totalDist = result.distance;
           routeGeometry = result.geometry;
@@ -658,7 +664,7 @@ const Optimizer = {
       }
 
       if (!solution) {
-        const points = [depot, ...driverStops];
+        const points = [startPoint, ...driverStops];
         let matrix;
 
         // Obtener matriz de tiempos reales desde ORS (cuando hay API key)
@@ -677,7 +683,7 @@ const Optimizer = {
           onProgress && onProgress(done, totalDrivers, (driver?.name||'?') + ' (sin API Key — tiempos estimados)');
         }
 
-        solution = this.solveLocal(driverStops, matrix, depTime, session.packages, depot, isInterior, corridor);
+        solution = this.solveLocal(driverStops, matrix, depTime, session.packages, startPoint, isInterior, corridor);
 
         let prevNode = 0;
         solution.forEach(s => {

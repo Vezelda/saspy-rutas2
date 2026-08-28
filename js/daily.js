@@ -179,6 +179,13 @@ const Daily = {
       ).join('');
       const homeOpt = d.canEndAtHome ? `
         <div class="form-group">
+          <label>Empieza en</label>
+          <select onchange="Daily.updateAsgn('${d.id}','startsAtHome',this.value==='1')">
+            <option value="0" ${!a.startsAtHome?'selected':''}>CDD</option>
+            <option value="1" ${a.startsAtHome?'selected':''}>Su base/casa</option>
+          </select>
+        </div>
+        <div class="form-group">
           <label>Termina en</label>
           <select onchange="Daily.updateAsgn('${d.id}','endsAtHome',this.value==='1')">
             <option value="0" ${!a.endsAtHome?'selected':''}>CDD</option>
@@ -723,7 +730,7 @@ const Daily = {
             <div>
               <div style="font-weight:600;font-size:15px;">${esc(driver?.name||'?')}</div>
               <div style="font-size:12px;color:var(--text2);">
-                ${esc(veh?.name||'?')} &middot; Sale ${(asgn.departureDate && asgn.departureDate !== this.session.date) ? fmtDateShort(asgn.departureDate) + ' ' : ''}${asgn.departureTime} &middot; Regresa a ${endLbl}
+                ${esc(veh?.name||'?')} &middot; Sale ${asgn.startsAtHome?'de su base ':''}${(asgn.departureDate && asgn.departureDate !== this.session.date) ? fmtDateShort(asgn.departureDate) + ' ' : ''}${asgn.departureTime} &middot; Regresa a ${endLbl}
               </div>
             </div>
           </div>`;

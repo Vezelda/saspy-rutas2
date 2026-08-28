@@ -949,15 +949,15 @@ const App = {
             </select>
           </div>
           <div class="form-group">
-            <label>¿Puede terminar en su casa?</label>
+            <label>¿Tiene una casa/base además del CDD?</label>
             <select id="fd-canhome" onchange="App.toggleHomeFields()">
-              <option value="0" ${!hasHome?'selected':''}>No — siempre regresa al CDD</option>
-              <option value="1" ${hasHome?'selected':''}>Sí — puede terminar en casa</option>
+              <option value="0" ${!hasHome?'selected':''}>No — siempre arranca/vuelve al CDD</option>
+              <option value="1" ${hasHome?'selected':''}>Sí — puede empezar y/o terminar ahí</option>
             </select>
           </div>
           <div id="home-fields" style="display:${hasHome?'contents':'none'}">
             <div class="form-group full">
-              <label>Dirección de casa (para geocodificar)</label>
+              <label>Dirección de casa/base (para geocodificar)</label>
               <input id="fd-homeaddr" type="text" value="${esc(d.homeAddress||'')}"
                 placeholder="Ej: Barrio San Pablo, Luque, Paraguay">
             </div>
