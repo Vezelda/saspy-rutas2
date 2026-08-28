@@ -48,6 +48,14 @@ function fmtDate(str) {
   });
 }
 
+// Versión corta (dd/mm) — para mostrar junto a una hora sin ocupar toda la línea,
+// ej. "Sale 26/08 02:00" cuando un chofer sale un día distinto al de la sesión.
+function fmtDateShort(str) {
+  if (!str) return '—';
+  const d = new Date(str+'T12:00');
+  return String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0');
+}
+
 function fmtDuration(secs) {
   const h = Math.floor(secs / 3600);
   const m = Math.floor((secs % 3600) / 60);

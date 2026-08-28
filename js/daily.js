@@ -171,7 +171,7 @@ const Daily = {
     const asgMap   = Object.fromEntries(this.session.assignments.map(a => [a.driverId, a]));
 
     const driverCards = drivers.map(d => {
-      const a   = asgMap[d.id] || { driverId:d.id, vehicleId:d.defaultVehicle, departureTime:'06:00', endsAtHome:d.canEndAtHome||false };
+      const a   = asgMap[d.id] || { driverId:d.id, vehicleId:d.defaultVehicle, departureDate:this.session.date, departureTime:'06:00', endsAtHome:d.canEndAtHome||false };
       const on  = !!asgMap[d.id];
       const veh = vMap[a.vehicleId];
       const vehicleOpts = vehicles.map(v =>
@@ -219,6 +219,11 @@ const Daily = {
                 <select onchange="Daily.updateAsgn('${d.id}','vehicleId',this.value)">${vehicleOpts}</select>
               </div>
               <div class="form-group">
+                <label>Fecha de salida</label>
+                <input type="date" value="${a.departureDate || this.session.date}"
+                  onchange="Daily.updateAsgn('${d.id}','departureDate',this.value)">
+              </div>
+              <div class="form-group">
                 <label>Hora de salida</label>
                 <input type="time" value="${a.departureTime}"
                   onchange="Daily.updateAsgn('${d.id}','departureTime',this.value)">
@@ -253,7 +258,7 @@ const Daily = {
       if (!this.session.assignments.find(a => a.driverId === id)) {
         const d = Storage.getDrivers().find(x => x.id === id);
         const isInterior = !!Optimizer._corridorKeyFromDriver(d);
-        this.session.assignments.push({ driverId:id, vehicleId:d?.defaultVehicle||'', departureTime:'06:00', endsAtHome:d?.canEndAtHome||false, breakInterval: isInterior ? 14400 : 0 });
+        this.session.assignments.push({ driverId:id, vehicleId:d?.defaultVehicle||'', departureDate:this.session.date, departureTime:'06:00', endsAtHome:d?.canEndAtHome||false, breakInterval: isInterior ? 14400 : 0 });
       }
     } else {
       this.session.assignments = this.session.assignments.filter(a => a.driverId !== id);
@@ -718,7 +723,7 @@ const Daily = {
             <div>
               <div style="font-weight:600;font-size:15px;">${esc(driver?.name||'?')}</div>
               <div style="font-size:12px;color:var(--text2);">
-                ${esc(veh?.name||'?')} &middot; Sale ${asgn.departureTime} &middot; Regresa a ${endLbl}
+                ${esc(veh?.name||'?')} &middot; Sale ${(asgn.departureDate && asgn.departureDate !== this.session.date) ? fmtDateShort(asgn.departureDate) + ' ' : ''}${asgn.departureTime} &middot; Regresa a ${endLbl}
               </div>
             </div>
           </div>`;

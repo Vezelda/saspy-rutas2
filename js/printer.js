@@ -28,7 +28,7 @@ const Printer = {
     const totalMin = Math.round(route.duration / 60);
     const totalKm  = (route.distance / 1000).toFixed(0);
     const endLabel = asgn?.endsAtHome ? 'Casa del chofer' : 'CDD';
-    const fecha    = fmtDate(session.date);
+    const fecha    = fmtDate(asgn?.departureDate || session.date);
 
     // Generar filas de la tabla
     let rows = '';

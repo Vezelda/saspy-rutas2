@@ -621,6 +621,11 @@ const Optimizer = {
 
       const driver     = dMap[asgn.driverId];
       const depTime    = timeToSecs(asgn.departureTime || '06:00');
+      // Cada chofer puede salir un día calendario distinto al de la sesión
+      // (ej. sesión armada el 25/08 a la tarde, pero un chofer sale recién
+      // el 26/08 de madrugada) — usar SU día real para elegir el horario
+      // correcto en paradas con hoursByDay (horario distinto por día).
+      this._routeDay   = this._dayOfWeek(asgn.departureDate || session.date);
       const isInterior = driverStops.some(s => this.INTERIOR_DEPTS.has(s.dept));
       const corridorKey = this._corridorKeyFromDriver(driver);
       const corridor     = corridorKey ? this.CORRIDORS[corridorKey] : null;
