@@ -29,7 +29,8 @@ const App = {
     this._refreshTimer = setInterval(async () => {
       const modalOpen = document.getElementById('modal-overlay')?.style.display === 'flex';
       const dragging = typeof Daily !== 'undefined' && Daily.dragRI !== null;
-      if (modalOpen || dragging) return;
+      const busy = typeof Daily !== 'undefined' && Daily._busy;
+      if (modalOpen || dragging || busy) return;
       await Storage.refreshFromServer();
       this._rerenderCurrent();
     }, 15000);

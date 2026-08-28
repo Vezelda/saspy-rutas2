@@ -588,6 +588,11 @@ const Daily = {
       ? '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 14px;margin-bottom:8px;font-size:12px;color:#1e40af;">&#128506; <strong>Usando ORS Matrix API</strong> &mdash; tiempos reales por carretera</div><div class="progress-bar"><div class="progress-fill" id="opt-fill"></div></div><p id="opt-status" style="font-size:12px;color:var(--text3);margin-top:6px;"></p>'
       : '<div style="background:#fefce8;border:1px solid #fde047;border-radius:8px;padding:10px 14px;font-size:12px;color:#854d0e;">&#9888; <strong>Sin API Key ORS</strong> &mdash; tiempos estimados (inexactos en hora pico).<br>Configurala en <strong>Configuraci&oacute;n &rarr; API Key ORS</strong> para tiempos reales.</div>';
 
+    // El cálculo puede tardar más que el intervalo del refresco automático
+    // (varias llamadas a VROOM, una por chofer) — si el refresco cae justo en
+    // el medio, Daily.init() reemplazaría la sesión y volvería al paso 1
+    // porque todavía no hay resultados guardados. Esta bandera lo frena.
+    this._busy = true;
     try {
       const result = await Optimizer.optimize(this.session, (done, total, name) => {
         const fill   = document.getElementById('opt-fill');
@@ -605,6 +610,8 @@ const Daily = {
       errEl.innerHTML = '<p class="test-error">Error: ' + e.message + '</p>';
       btn.disabled = false;
       btn.textContent = 'Reintentar';
+    } finally {
+      this._busy = false;
     }
   },
 
