@@ -14,11 +14,12 @@ const Optimizer = {
                  { lat:-24.66,  lng:-56.44   }, // Santani
                  { lat:-22.54,  lng:-55.73   }, // Pedro Juan Caballero
                ]},
-    'este':  { depts: new Set(['Cordillera','Caaguazú','Alto Paraná','Canindeyú']),
+    // Solo Alto Paraná/Canindeyú (zona de Ciudad del Este) — Cordillera
+    // (Caacupé) y Caaguazú (Cnel. Oviedo) NO son parte de este corredor,
+    // se reparten como cualquier parada urbana más por cercanía geográfica.
+    'este':  { depts: new Set(['Alto Paraná','Canindeyú']),
                waypoints: [
                  { lat:-25.2796, lng:-57.4686 }, // CDD
-                 { lat:-25.39,  lng:-57.15   }, // Caacupé
-                 { lat:-25.47,  lng:-56.46   }, // Coronel Oviedo
                  { lat:-25.52,  lng:-54.61   }, // Ciudad del Este
                ]},
     'sur':   { depts: new Set(['Paraguarí','Guairá','Itapúa','Misiones']),
@@ -46,9 +47,11 @@ const Optimizer = {
     return null;
   },
 
+  // Caaguazú y Cordillera (Caacupé, Cnel. Oviedo) quedaron afuera a propósito:
+  // se reparten como cualquier parada urbana más, no fuerzan chofer de corredor.
   INTERIOR_DEPTS: new Set([
-    'Amambay','Caaguazú','Alto Paraná','Canindeyú','Guairá','Itapúa',
-    'Misiones','Paraguarí','San Pedro','Concepción','Cordillera',
+    'Amambay','Alto Paraná','Canindeyú','Guairá','Itapúa',
+    'Misiones','Paraguarí','San Pedro','Concepción',
     'Presidente Hayes','Neembucú','Pdte. Hayes',
   ]),
 
